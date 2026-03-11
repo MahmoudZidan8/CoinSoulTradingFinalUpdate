@@ -1,0 +1,80 @@
+﻿@inherits LayoutComponentBase
+@* @using CoinSoul.Components.Layout.NavMenu *@
+@using CoinSoul.Components.Account.Shared
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+
+    <MudAppBar Elevation="2" Class="px-4">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2">CoinSoul</MudText>
+        <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudChip Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Person">
+                    @context.User.Identity?.Name
+                </MudChip>
+            </Authorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Variant="DrawerVariant.Responsive" Elevation="1" Class="px-2">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h6" Class="ml-2">Navigation</MudText>
+        </MudDrawerHeader>
+
+        <MudNavMenu>
+
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+                Dashboard
+            </MudNavLink>
+
+            <MudNavLink Href="/trading/trade" Icon="@Icons.Material.Filled.PlayCircle">
+                Trading Console
+            </MudNavLink>
+
+            <MudDivider Class="my-2" />
+
+            <MudNavLink Href="/trading/strategy" Icon="@Icons.Material.Filled.AutoGraph">
+                Strategy
+            </MudNavLink>
+
+            <MudNavLink Href="/trading/open-trades" Icon="@Icons.Material.Filled.ListAlt">
+                Open Trades
+            </MudNavLink>
+
+            <MudNavLink Href="/trading/trade-history" Icon="@Icons.Material.Filled.History">
+                Trade History
+            </MudNavLink>
+
+            <MudNavLink Href="/trading/account" Icon="@Icons.Material.Filled.AccountBalanceWallet">
+                Account
+            </MudNavLink>
+
+            <MudNavLink Href="/trading/settings" Icon="@Icons.Material.Filled.Settings">
+                Settings
+            </MudNavLink>
+
+            <MudDivider Class="my-2" />
+            <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Logout">
+                Logout
+            </MudNavLink>
+
+
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent Class="pa-4">
+        @Body
+    </MudMainContent>
+
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+}

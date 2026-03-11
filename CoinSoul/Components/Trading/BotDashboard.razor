@@ -1,0 +1,118 @@
+﻿@* @page "/" *@
+@page "/dashboard"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@inject ITradingEngine TradingEngine
+@inject CoinSoul.BinanceService.AutoServices.AccountDataService.IAutoAccountDataService AccountData
+@inject CoinSoul.BinanceService.AutoServices.SpotTradeService.IAutoSpotTradeService Spot
+@inject ISnackbar Snackbar
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudText Typo="Typo.h5">Dashboard (Overview)</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary">Bot status + quick health + balances snapshot</MudText>
+
+    <MudDivider Class="my-3" />
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Bot Status</MudText>
+                <MudChip Color="@StatusColor" Variant="Variant.Filled" Class="mt-2">@BotState.Status</MudChip>
+                <MudText Typo="Typo.body2" Class="mt-2"><b>Last Tick:</b> @(_lastTickText)</MudText>
+                @* <MudText Typo="Typo.body2"><b>Open Positions:</b> @BotState.OpenPositions.Count</MudText> *@
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Account</MudText>
+                <MudText Typo="Typo.h6" Class="mt-2">@(_usdtBalanceText)</MudText>
+                <MudButton Variant="Variant.Outlined" OnClick="LoadAccountSnapshot" Class="mt-2">
+                    Refresh
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Active Settings</MudText>
+                @* <MudText Typo="Typo.body2" Class="mt-2"><b>Mode:</b> @BotState.Settings.Mode</MudText> *@
+                @* <MudText Typo="Typo.body2"><b>Strategy:</b> @BotState.Settings.Strategy</MudText> *@
+                @* <MudText Typo="Typo.body2"><b>Budget (USDT):</b> @BotState.Settings.BudgetUsdt</MudText> *@
+                @* <MudText Typo="Typo.body2"><b>Risk %:</b> @BotState.Settings.RiskPerTradePercent</MudText> *@
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudDivider Class="my-3" />
+
+    <MudStack Row="true" Spacing="2">
+        <MudButton Color="Color.Success"
+                   Variant="Variant.Filled"
+                   Disabled="@IsRunning"
+                   OnClick="StartBot">
+            ▶ Start Bot
+        </MudButton>
+
+        <MudButton Color="Color.Error"
+                   Variant="Variant.Filled"
+                   Disabled="@(!IsRunning)"
+                   OnClick="StopBot">
+            ■ Stop Bot
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private BotState BotState = new();
+
+    private string _lastTickText = "—";
+    private string _usdtBalanceText = "USDT: —";
+
+    private bool IsRunning => BotState.Status == BotStatus.Running;
+
+    private Color StatusColor => BotState.Status switch
+    {
+        BotStatus.Running => Color.Success,
+        BotStatus.Stopped => Color.Default,
+        BotStatus.Error => Color.Error,
+        _ => Color.Warning
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoadState();
+
+        TradingEngine.OnStateChanged += async () =>
+        {
+            LoadState();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await LoadAccountSnapshot();
+    }
+
+    private void LoadState()
+    {
+        BotState = TradingEngine.GetState();
+        _lastTickText = BotState.LastTickAt?.ToLocalTime().ToString("HH:mm:ss") ?? "—";
+    }
+
+    private Task StartBot() => TradingEngine.EnqueueAsync(new StartBotCommand());
+    private Task StopBot() => TradingEngine.EnqueueAsync(new StopBotCommand());
+
+    private async Task LoadAccountSnapshot()
+    {
+        try
+        {
+            var balances = await AccountData.GetBalancesAsync();
+            var usdt = balances.FirstOrDefault(b => string.Equals(b.Asset, "USDT", StringComparison.OrdinalIgnoreCase));
+            // _usdtBalanceText = usdt is null ? "USDT: 0" : $"USDT: {usdt.Free:0.####} (free) / {usdt.Total:0.####} (total)";
+        }
+        catch (Exception ex)
+        {
+            _usdtBalanceText = "USDT: —";
+            Snackbar.Add($"Account snapshot failed: {ex.Message}", Severity.Warning);
+        }
+    }
+}

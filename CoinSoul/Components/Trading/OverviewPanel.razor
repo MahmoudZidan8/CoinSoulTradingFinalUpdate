@@ -1,0 +1,212 @@
+﻿@using CoinSoul.Trading.Core
+@using CoinSoul.BinanceService.AutoServices.AccountDataService
+
+@inject ITradingEngine TradingEngine
+@inject IAutoAccountDataService AccountData
+@inject ISnackbar Snackbar
+
+<MudGrid Spacing="3" Style="background-color:black">
+
+    <!-- ================= BOT ================= -->
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6">🤖 Bot</MudText>
+
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Status: <b>@State.Status</b>
+            </MudText>
+
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Strategy: <b>@State.Settings.StrategyMode</b>
+            </MudText>
+
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Paper Trading: <b>@(State.Settings.PaperTrading ? "ON" : "OFF")</b>
+            </MudText>
+
+            <MudDivider Class="my-2" />
+
+            <MudStack Row Spacing="2">
+                <MudButton Color="Color.Success"
+                           Disabled="@(State.Status == BotStatus.Running)"
+                           OnClick="StartBot">
+                    ▶ Start
+                </MudButton>
+
+                <MudButton Color="Color.Error"
+                           Disabled="@(State.Status != BotStatus.Running)"
+                           OnClick="StopBot">
+                    ■ Stop
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- ================= PORTFOLIO ================= -->
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4">
+            <MudStack Row AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.h6">💰 Portfolio</MudText>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="LoadBalances">
+                    ↻ Refresh
+                </MudButton>
+            </MudStack>
+
+            @if (_loadingBalances)
+            {
+                <MudText Color="Color.Secondary">Loading balances…</MudText>
+            }
+            else if (!string.IsNullOrWhiteSpace(_balancesError))
+            {
+                <MudAlert Severity="Severity.Error">@_balancesError</MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
+                    Total (USDT)
+                </MudText>
+
+                <MudText Typo="Typo.h4" Color="Color.Success">
+                    @_portfolioUsdt?.ToString("0.00")
+                </MudText>
+
+                <MudText Typo="Typo.caption" Color="Color.Info">
+                    ≈ @(_portfolioUsdt.HasValue ? (_portfolioUsdt.Value * 50).ToString("N0") : "-") EGP
+                </MudText>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <!-- ================= ANALYTICS ================= -->
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4">
+            <MudStack Row AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.h6">📊 Analytics (DB)</MudText>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="LoadStats">
+                    ↻ Refresh
+                </MudButton>
+            </MudStack>
+
+            <MudDivider Class="my-2" />
+
+            @if (_loadingStats)
+            {
+                <MudText Color="Color.Secondary">Loading…</MudText>
+            }
+            else
+            {
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption">Trades</MudText>
+                        <MudText Typo="Typo.h6">@_stats.TotalTrades</MudText>
+                    </MudItem>
+
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption">Win Rate</MudText>
+                        <MudText Typo="Typo.h6">@_stats.WinRatePct.ToString("0.0")%</MudText>
+                    </MudItem>
+
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption">Net PnL</MudText>
+                        <MudText Typo="Typo.h6">@_stats.NetPnlUsdt.ToString("0.00")</MudText>
+                    </MudItem>
+
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption">Max DD</MudText>
+                        <MudText Typo="Typo.h6">@_stats.MaxDrawdownUsdt.ToString("0.00")</MudText>
+                    </MudItem>
+                </MudGrid>
+            }
+        </MudPaper>
+    </MudItem>
+
+</MudGrid>
+
+@code {
+    private BotState State = new();
+
+    private DashboardStats _stats = new();
+    private bool _loadingStats;
+
+    private decimal? _portfolioUsdt;
+    private bool _loadingBalances;
+    private string? _balancesError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        State = TradingEngine.GetState();
+        TradingEngine.OnStateChanged += () =>
+        {
+            State = TradingEngine.GetState();
+            InvokeAsync(StateHasChanged);
+        };
+
+        await LoadBalances();
+        await LoadStats();
+    }
+
+    private async Task LoadBalances()
+    {
+        try
+        {
+            _loadingBalances = true;
+            _balancesError = null;
+
+            var balances = await AccountData.GetBalancesAsync(null, false, null);
+            var prices = State.Market?.Prices ?? new Dictionary<string, decimal>();
+
+            decimal total = 0;
+            foreach (var b in balances.Where(b => b.Total > 0))
+            {
+                if (b.Asset == "USDT")
+                    total += b.Total;
+                else if (prices.TryGetValue(b.Asset + "USDT", out var p))
+                    total += b.Total * p;
+            }
+
+            _portfolioUsdt = total;
+        }
+        catch (Exception ex)
+        {
+            _balancesError = ex.Message;
+        }
+        finally
+        {
+            _loadingBalances = false;
+        }
+    }
+
+    private async Task LoadStats()
+    {
+        _loadingStats = true;
+        _stats = await TradingEngine.GetDashboardStatsAsync(CancellationToken.None);
+        _loadingStats = false;
+    }
+
+    private async Task StartBot()
+    {
+        var s = TradingEngine.GetState().Settings;
+
+        if (s.StrategyMode == StrategyMode.ManualA &&
+            (s.ManualSymbols is null || !s.ManualSymbols.Any(x => x.Enabled)))
+        {
+            Snackbar.Add("Enable at least one symbol for Manual Strategy A.", Severity.Error);
+            return;
+        }
+
+        if (s.StrategyMode == StrategyMode.AutoScalperD && !s.AutoScalperEnabled)
+        {
+            Snackbar.Add("Enable AutoScalper from Strategy D first.", Severity.Error);
+            return;
+        }
+
+        await TradingEngine.EnqueueAsync(new StartBotCommand());
+        Snackbar.Add("Bot started.", Severity.Success);
+    }
+
+    private async Task StopBot()
+    {
+        await TradingEngine.EnqueueAsync(new StopBotCommand());
+        Snackbar.Add("Bot stopped.", Severity.Warning);
+    }
+}

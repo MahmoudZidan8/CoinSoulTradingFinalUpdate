@@ -1,0 +1,123 @@
+@page "/adaptive-monitor"
+@using CoinSoul.Trading.Engine.Adaptive
+@inject IScanScheduler ScanScheduler
+@inject ILogger<AdaptiveMonitor> Logger
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Adaptive Scanning Monitor</MudText>
+
+    @if (_stats != null)
+    {
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudCard>
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6">Recent Hit Rate</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Primary">
+                            @_stats.RecentHitRatePercent.ToString("F1")%
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudCard>
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6">Total Scans</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Info">
+                            @_stats.TotalScans
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudCard>
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6">Avg Delay</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Success">
+                            @_stats.AverageDelayMs ms
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudCard>
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6">Categories</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Warning">
+                            @_stats.CategoryCounts.Count
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudCard>
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Category Breakdown</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudSimpleTable Dense="true">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Count</th>
+                                    <th>Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var category in _stats.CategoryCounts.OrderByDescending(kvp => kvp.Value))
+                                {
+                                    var percentage = _stats.TotalScans > 0 
+                                        ? (double)category.Value / _stats.TotalScans * 100 
+                                        : 0;
+                                    
+                                    <tr>
+                                        <td>@category.Key</td>
+                                        <td>@category.Value</td>
+                                        <td>@percentage.ToString("F1")%</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+    else
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+</MudContainer>
+
+@code {
+    private SchedulerStats? _stats;
+    private Timer? _refreshTimer;
+
+    protected override void OnInitialized()
+    {
+        LoadStats();
+        _refreshTimer = new Timer(_ => InvokeAsync(LoadStats), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private void LoadStats()
+    {
+        try
+        {
+            _stats = ScanScheduler.GetStats();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load adaptive stats");
+        }
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

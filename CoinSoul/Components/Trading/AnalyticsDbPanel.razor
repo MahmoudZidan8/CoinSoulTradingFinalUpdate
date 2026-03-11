@@ -1,0 +1,145 @@
+﻿@using CoinSoul.Entities
+@using CoinSoul.Repository.DbContext
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<CoinSoulDbContext> DbFactory
+@inject IJSRuntime JS
+
+<MudGrid Spacing="2" Style="background-color:black">
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                <MudText Typo="Typo.subtitle1">📈 Equity Curve (DB)</MudText>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ReloadAsync" Disabled="_loading">↻ Refresh</MudButton>
+            </MudStack>
+            <MudDivider Class="my-2" />
+
+            <canvas id="chart-equity-db" @ref="_equityCanvas" height="160"></canvas>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-3">
+            <MudText Typo="Typo.subtitle1">📊 Daily PnL (DB)</MudText>
+            <MudDivider Class="my-2" />
+            <canvas id="chart-daily-db" @ref="_dailyCanvas" height="160"></canvas>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private bool _loading;
+    private ElementReference _equityCanvas;
+    private ElementReference _dailyCanvas;
+
+    protected override async Task OnInitializedAsync()
+        => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+
+        await using var db = DbFactory.CreateDbContext();
+
+        // Closed positions only
+        var closed = await db.Positions.AsNoTracking()
+            .Where(p => !p.IsOpen && p.ClosedAtUtc != null)
+            .OrderBy(p => p.ClosedAtUtc)
+            .ToListAsync();
+
+        // Equity (cumulative)
+        decimal cum = 0m;
+        var eqLabels = new List<string>();
+        var eqValues = new List<decimal>();
+
+        foreach (var p in closed)
+        {
+            cum += p.NetPnlUsdt;
+            eqLabels.Add(p.ClosedAtUtc!.Value.ToLocalTime().ToString("MM-dd HH:mm"));
+            eqValues.Add(cum);
+        }
+
+        // Daily pnl
+        var daily = closed
+            .GroupBy(p => p.ClosedAtUtc!.Value.ToLocalTime().Date)
+            .OrderBy(g => g.Key)
+            .Select(g => new { Day = g.Key, Pnl = g.Sum(x => x.NetPnlUsdt) })
+            .ToList();
+
+        var dLabels = daily.Select(x => x.Day.ToString("MM-dd")).ToList();
+        var dValues = daily.Select(x => x.Pnl).ToList();
+
+        // Render Chart.js via JS interop
+        await RenderEquityAsync(eqLabels, eqValues);
+        await RenderDailyAsync(dLabels, dValues);
+
+        _loading = false;
+    }
+
+    private async Task RenderEquityAsync(List<string> labels, List<decimal> values)
+    {
+        var config = new
+        {
+            type = "line",
+            data = new
+            {
+                labels,
+                datasets = new[]
+                {
+                    new {
+                        label = "Equity (USDT)",
+                        data = values,
+                        tension = 0.25
+                    }
+                }
+            },
+            options = new
+            {
+                responsive = true,
+                maintainAspectRatio = false,
+                plugins = new { legend = new { display = true } }
+            }
+        };
+
+        await JS.InvokeVoidAsync("coinSoulCharts.render", "equity-db", "line", labels, new[]
+        {
+            new {
+                label = "Equity (USDT)",
+                data = values,
+                tension = 0.25
+            }
+        });
+    }
+
+    private async Task RenderDailyAsync(List<string> labels, List<decimal> values)
+    {
+        var config = new
+        {
+            type = "bar",
+            data = new
+            {
+                labels,
+                datasets = new[]
+                {
+                    new {
+                        label = "Daily PnL (USDT)",
+                        data = values
+                    }
+                }
+            },
+            options = new
+            {
+                responsive = true,
+                maintainAspectRatio = false,
+                plugins = new { legend = new { display = true } }
+            }
+        };
+
+        await JS.InvokeVoidAsync("coinSoulCharts.render", "daily-db", "bar", labels, new[]
+        {
+            new {
+                label = "Daily PnL (USDT)",
+                data = values
+            }
+        });
+    }
+}

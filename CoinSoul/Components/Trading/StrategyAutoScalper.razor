@@ -1,0 +1,1058 @@
+﻿@page "/trading/strategy-auto"
+@rendermode InteractiveServer
+@layout DashboardLayout
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Entities
+@using CoinSoul.Trading.Engine.Settings
+@inject BotSettingsService SettingsService
+@inject INotificationService Notifier
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="strategy-page" Style="background-color:black">
+
+    <!-- HEADER -->
+    <MudStack Spacing="1" Class="mb-4">
+        <MudText Typo="Typo.h4" Class="page-title">
+            ⚡ Strategy Auto Control Center
+        </MudText>
+
+        <MudText Typo="Typo.body2" Class="page-subtitle">
+            Single source of truth: <b>BotSettings DB</b>. Changes apply immediately to runtime.
+        </MudText>
+    </MudStack>
+
+    <!-- STATUS INDICATOR -->
+    <MudPaper Class="pa-3 mb-3" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudStack Row Spacing="3" AlignItems="AlignItems.Center">
+            <MudChip Size="Size.Small" 
+                     Color="@(_model.AutoScalperEnabled ? Color.Success : Color.Default)" 
+                     Icon="@Icons.Material.Filled.SmartToy">
+                AutoScalper: @(_model.AutoScalperEnabled ? "ENABLED" : "DISABLED")
+            </MudChip>
+            
+            <MudChip Size="Size.Small" 
+                     Color="@(_model.ExecuteTrades ? Color.Warning : Color.Info)" 
+                     Icon="@Icons.Material.Filled.MonetizationOn">
+                @(_model.ExecuteTrades ? "LIVE TRADING" : "DRY RUN")
+            </MudChip>
+            
+            @if (_model.KillSwitch)
+            {
+                <MudChip Size="Size.Small" 
+                         Color="Color.Error" 
+                         Icon="@Icons.Material.Filled.Block">
+                    🔴 KILL SWITCH ACTIVE
+                </MudChip>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <!-- KPI ROW -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="3">
+            <MudPaper Class="kpi-card">
+                <MudText Class="kpi-label">Trade Size</MudText>
+                <MudText Class="kpi-value">$@_model.TargetUsdPerTrade</MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="3">
+            <MudPaper Class="kpi-card">
+                <MudText Class="kpi-label">Max Positions</MudText>
+                <MudText Class="kpi-value">@_model.MaxOpenTrades</MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="3">
+            <MudPaper Class="kpi-card">
+                <MudText Class="kpi-label">TP / SL</MudText>
+                <MudText Class="kpi-value">
+                    @_model.TakeProfitGrossPct% / @_model.StopLossGrossPct%
+                </MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="3">
+            <MudPaper Class="kpi-card">
+                <MudText Class="kpi-label">Net Target</MudText>
+                <MudText Class="kpi-value">$@_model.NetProfitTargetUsd</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- SETTINGS CARD -->
+    <MudPaper Class="settings-card" style="background-color:black;">
+
+        <MudSwitch @bind-Checked="_model.AutoScalperEnabled"
+                   Color="Color.Success"
+                   Label="Enable AutoScalper"
+                   Class="mb-4" />
+
+        <MudExpansionPanels MultiExpansion="true" Elevation="0">
+
+            <!-- 1 Capital & Dynamic Sizing -->
+            <MudExpansionPanel Text="1️⃣ Capital Allocation & Dynamic Sizing" Expanded="true" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            <strong>Dynamic Sizing:</strong> Automatically adjusts trade size based on available balance and reserves.
+                        </MudAlert>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Target USD Per Trade"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.TargetUsdPerTrade"
+                                         Min="10m" Max="1000m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Ideal trade size when sufficient balance available.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Min USD Per Trade"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MinUsdPerTrade"
+                                         Min="5m" Max="100m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Minimum acceptable trade size. Blocks if too small.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Min Free USDT Reserve"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MinFreeUsdtReserve"
+                                         Min="0m" Max="100m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Safety buffer. Reserves this amount before sizing.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Max Open Trades"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MaxOpenTrades"
+                                         Min="1" Max="20" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Maximum number of concurrent positions.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.PreventSameSymbolTwice"
+                                   Color="Color.Primary"
+                                   Label="Prevent Same Symbol Twice" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Block entry if symbol already has an open position.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Trade History Top Symbols"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.TradeHistoryTopSymbols"
+                                         Min="10" Max="200" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Number of top symbols to scan in trade history aggregation.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 2 Net Profit -->
+            <MudExpansionPanel Text="2️⃣ Net Profit Engine" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Take Profit %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.TakeProfitGrossPct"
+                                         Min="0.1m" Max="5m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Gross take profit percentage relative to entry price.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Stop Loss %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.StopLossGrossPct"
+                                         Min="0.1m" Max="10m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Gross stop loss percentage below entry price.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Net Profit Target USD"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.NetProfitTargetUsd"
+                                         Min="0.01m" Max="50m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Minimum net profit after all fees per trade.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.IncludeFeesInTP"
+                                   Color="Color.Primary"
+                                   Label="Include Fees in TP Calculation" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Adjusts take profit to cover maker/taker fees.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 3 Execution -->
+            <MudExpansionPanel Text="3️⃣ Execution & Safety" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.UseOcoExit"
+                                   Color="Color.Primary"
+                                   Label="Use OCO Exit" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Places TP and SL as a single OCO order (one-cancels-other).
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="OCO Stop Limit Buffer %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.OcoStopLimitBufferPct"
+                                         Min="0m" Max="1m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Buffer between stop price and stop limit price in OCO.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.PlaceSeparateTpSlIfOcoFails"
+                                   Color="Color.Warning"
+                                   Label="Fallback to Separate TP/SL if OCO Fails" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            If OCO rejected, places separate limit (TP) and stop-limit (SL) orders.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 4 Cooldown -->
+            <MudExpansionPanel Text="4️⃣ Smart Cooldown" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.EnableSmartCooldown"
+                                   Color="Color.Primary"
+                                   Label="Enable Smart Cooldown" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Prevents revenge trading and rapid re-entries on same symbol.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Smart Cooldown Minutes"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.SmartCooldownMinutes"
+                                         Min="0" Max="240" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Blocks symbol re-entry for this many minutes after a loss.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Max Re-entries Per Symbol Per Hour"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MaxReentriesPerSymbolPerHour"
+                                         Min="0" Max="60" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Limits how many times a symbol can be re-entered within 1 hour.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Block Revenge Trading Minutes"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.BlockRevengeTradingMinutes"
+                                         Min="0" Max="240" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Blocks same symbol for this duration after consecutive losses.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.EnableSpikeBlock"
+                                   Color="Color.Warning"
+                                   Label="Enable Spike Block" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Blocks entry during extreme volatility spikes.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 5 Regime -->
+            <MudExpansionPanel Text="5️⃣ Market Regime Filter" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.EnableMarketRegimeFilter"
+                                   Color="Color.Primary"
+                                   Label="Enable Regime Filter" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Adjusts TP/SL and risk based on BTC market regime (trending/sideways/volatile).
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Regime Timeframe Minutes"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RegimeTimeframeMinutes"
+                                         Min="1" Max="240" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Kline period for regime detection (e.g., 15m = 15-minute candles).
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="BTC EMA Period"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.BtcEmaPeriod"
+                                         Min="50" Max="500" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            EMA period for BTC trend detection.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 6 Signals -->
+            <MudExpansionPanel Text="6️⃣ Signal Filters" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="RSI Max For Entry"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RsiMaxForEntry"
+                                         Min="50m" Max="95m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Blocks entry if RSI exceeds this value (prevents buying overbought).
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 7 Session -->
+            <MudExpansionPanel Text="7️⃣ Session / Time" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.TradingEnabled"
+                                   Color="Color.Success"
+                                   Label="Trading Enabled" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Master switch for trading session.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 8 Entry Execution -->
+            <MudExpansionPanel Text="8️⃣ Entry Execution & Safety" Class="strategy-panel">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            <strong>Entry Method:</strong> Control how buy orders are placed to improve fill quality and reduce slippage.
+                        </MudAlert>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.UseLimitMakerEntry"
+                                   Color="Color.Primary"
+                                   Label="Use LIMIT_MAKER Entry" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Places limit orders below market price. Earns maker rebates.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Limit Maker Discount (BPS)"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.LimitMakerDiscountBps"
+                                         Min="1m" Max="50m"
+                                         Disabled="!_model.UseLimitMakerEntry" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            5 bps = 0.05% below market. Higher = more aggressive discount.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Limit Maker Timeout (seconds)"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.LimitMakerTimeoutSeconds"
+                                         Min="1" Max="30"
+                                         Disabled="!_model.UseLimitMakerEntry" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Max wait time before fallback to market order.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.FallbackToMarketOnEntryTimeout"
+                                   Color="Color.Warning"
+                                   Label="Fallback to Market on Timeout"
+                                   Disabled="!_model.UseLimitMakerEntry" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            If limit order not filled, use market order. If OFF, cancels entry.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="OCO Retry Attempts"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.OcoRetryAttempts"
+                                         Min="0" Max="3" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Retry OCO placement if first attempt fails (precision errors).
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- DIVIDER FOR ADVANCED SECTION -->
+            <MudItem xs="12" Class="mt-6 mb-4">
+                <MudDivider Class="my-6" />
+                <MudText Typo="Typo.h5" Style="color:#f1f5f9; font-weight:600; margin-top:24px; margin-bottom:16px;">
+                    🔧 Advanced System Controls
+                </MudText>
+            </MudItem>
+
+            <!-- 9 TRADING CONTROL -->
+            <MudExpansionPanel Text="🛑 Trading Control & Kill Switches" Class="strategy-panel">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Warning" Dense="true">
+                            <strong>⚠️ CRITICAL:</strong> These switches control live trading execution and emergency stops.
+                        </MudAlert>
+                    </MudItem>
+
+                    <MudItem xs="12" md="3">
+                        <MudSwitch @bind-Checked="_model.ExecuteTrades"
+                                   Color="Color.Success"
+                                   Label="Execute Trades" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            <strong style="color:#f59e0b;">DRY RUN if OFF.</strong> Enables real order placement when ON.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="3">
+                        <MudSwitch @bind-Checked="_model.KillSwitch"
+                                   Color="Color.Error"
+                                   Label="🔴 Kill Switch" />
+                        <MudText Typo="Typo.caption" Style="color:#ef4444;">
+                            <strong>EMERGENCY STOP.</strong> Blocks ALL trading immediately.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="3">
+                        <MudDatePicker Label="Pause Until (UTC)"
+                                       @bind-Date="_pauseDate"
+                                       Variant="Variant.Outlined"
+                                       Clearable="true" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Soft pause - blocks new entries until this time. Nullable.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="3">
+                        <MudDatePicker Label="Stop Until (UTC)"
+                                       @bind-Date="_stopDate"
+                                       Variant="Variant.Outlined"
+                                       Clearable="true" />
+                        <MudText Typo="Typo.caption" Style="color:#ef4444;">
+                            <strong>HARD STOP</strong> - blocks all trading until this time. Nullable.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 10 SPREAD & SLIPPAGE -->
+            <MudExpansionPanel Text="📉 Spread & Slippage Protection" Class="strategy-panel">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            Protects against poor fills and excessive slippage during volatile conditions.
+                        </MudAlert>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Max Spread %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MaxSpreadPct"
+                                         Min="0.05m" Max="5m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Blocks entry if bid/ask spread exceeds this percentage.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Spread Buffer %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.SpreadBufferPct"
+                                         Min="0m" Max="1m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Additional spread buffer for safety margin calculations.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Max Allowed Entry Slippage %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MaxAllowedEntrySlippagePct"
+                                         Min="0.05m" Max="5m" />
+                        <MudText Typo="Typo.caption" Style="color:#ef4444;">
+                            <strong>CRITICAL:</strong> If fill price exceeds this slippage %, emergency exit is triggered.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Slippage Buffer %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.SlippageBufferPct"
+                                         Min="0m" Max="1m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            General slippage buffer for price calculations.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Slippage Buffer USD"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.SlippageBufferUsd"
+                                         Min="0m" Max="10m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Fixed USD buffer for slippage protection.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 11 ADVANCED SIGNAL FILTERS -->
+            <MudExpansionPanel Text="📊 Advanced Signal Filters" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Momentum Min %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MomentumMinPct"
+                                         Min="-5m" Max="5m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Minimum momentum percentage required for entry signal.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Min Volume 24h USD"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MinVolume24hUsd"
+                                         Min="0m" Max="1000000000m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Minimum 24-hour trading volume required (liquidity filter).
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudSwitch @bind-Checked="_model.RejectShortTermPeak"
+                                   Color="Color.Warning"
+                                   Label="Reject Short-Term Peak" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Blocks entry if price is at recent local high (anti-FOMO).
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 12 MARKET REGIME ADVANCED -->
+            <MudExpansionPanel Text="🌊 Market Regime Advanced Parameters" Class="strategy-panel">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            Fine-tune regime detection thresholds and multipliers.
+                        </MudAlert>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Sideways ATR % Threshold"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.SidewaysAtrPctThreshold"
+                                         Min="0.05m" Max="10m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            ATR threshold to classify market as sideways/choppy.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="High Vol ATR % Threshold"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.HighVolAtrPctThreshold"
+                                         Min="0.05m" Max="10m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            ATR threshold to classify market as high volatility.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Regime Risk Scale"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RegimeRiskScale"
+                                         Min="0.3m" Max="1.0m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Risk multiplier during unfavorable regimes (0.7 = 70% position size).
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Regime TP Scale"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RegimeTpScale"
+                                         Min="0.5m" Max="1.5m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Take profit multiplier during favorable regimes (1.2 = 120% TP target).
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Regime ATR Lookback"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RegimeAtrLookback"
+                                         Min="14" Max="200" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Number of periods for ATR volatility calculation.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Regime Fast EMA Period"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RegimeFastEmaPeriod"
+                                         Min="5" Max="100" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Fast EMA period for trend detection (e.g., 12).
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Regime Slow EMA Period"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RegimeSlowEmaPeriod"
+                                         Min="20" Max="300" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Slow EMA period for trend detection (e.g., 26 or 200).
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 13 RISK GUARD SYSTEM -->
+            <MudExpansionPanel Text="⚠️ Risk Guard Auto-Pause System" Class="strategy-panel">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Error" Dense="true">
+                            <strong>🚨 RISK GUARD:</strong> Automatically pauses/stops trading during drawdowns. Negative percentages required.
+                        </MudAlert>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Pause After 30-Min Drawdown %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RiskGuardPause30MinPct"
+                                         Min="-50m" Max="0m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            If 30-min PnL drops below this % (e.g., -5%), auto-pause for 30 minutes.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Pause After 3-Hour Drawdown %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RiskGuardPause3HourPct"
+                                         Min="-50m" Max="0m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            If 3-hour PnL drops below this % (e.g., -10%), auto-pause for 3 hours.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal"
+                                         Label="Stop Until Midnight After Drawdown %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.RiskGuardStopUntilMidnightPct"
+                                         Min="-50m" Max="0m" />
+                        <MudText Typo="Typo.caption" Style="color:#ef4444;">
+                            <strong>HARD STOP</strong> until midnight UTC if PnL drops below this % (e.g., -15%).
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 14 RECONCILIATION & SYNC -->
+            <MudExpansionPanel Text="🔄 Reconciliation & Balance Sync" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="int"
+                                         Label="Reconcile Interval (seconds)"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.ReconcileIntervalSeconds"
+                                         Min="10" Max="300" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            How often to sync DB positions with Binance reality.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="int"
+                                         Label="Balance Refresh Cooldown (ms)"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.BalanceRefreshCooldownMs"
+                                         Min="500" Max="10000" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Minimum time between balance refresh API calls (prevents rate limiting).
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 15 DUST MANAGEMENT -->
+            <MudExpansionPanel Text="🧹 Dust & Quantity Management" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="decimal"
+                                         Label="Dust Ignore USD Threshold"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.DustIgnoreUsdThreshold"
+                                         Min="0m" Max="10m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Ignores leftover position value below this USD (doesn't attempt to sell).
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="decimal"
+                                         Label="Quantity Buffer %"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.QtyBufferPct"
+                                         Min="0m" Max="5m" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Safety buffer when calculating sell quantity (prevents insufficient balance errors).
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 16 COOLDOWN ADVANCED -->
+            <MudExpansionPanel Text="⏱ Cooldown Advanced Timers" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int"
+                                         Label="Entry Cooldown (seconds)"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.EntryCooldownSeconds"
+                                         Min="0" Max="600" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Minimum time between ANY new entries (global cooldown).
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int"
+                                         Label="Cooldown After Entry (seconds)"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.CooldownAfterEntrySeconds"
+                                         Min="0" Max="600" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Wait time after successful entry before next entry.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int"
+                                         Label="Cooldown After Loss (seconds)"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.CooldownAfterLossSeconds"
+                                         Min="0" Max="1800" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Extended cooldown after a losing trade.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="3">
+                        <MudNumericField T="int"
+                                         Label="Same Symbol Cooldown (seconds)"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.CooldownSameSymbolSeconds"
+                                         Min="0" Max="3600" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Per-symbol cooldown prevents rapid re-entry on same asset.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int"
+                                         Label="Max Trade Duration (minutes)"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MaxTradeDurationMinutes"
+                                         Min="1" Max="240" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Maximum time to hold position before forced time exit.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+            <!-- 17 FEES -->
+            <MudExpansionPanel Text="💰 Fee Configuration" Class="strategy-panel">
+                <MudGrid Spacing="3">
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="decimal"
+                                         Label="Maker Fee Rate"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.MakerFeeRate"
+                                         Min="0m" Max="0.01m"
+                                         Step="0.0001m"
+                                         Format="F4" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Maker fee rate (e.g., 0.0010 = 0.10%). Used for limit orders.
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="decimal"
+                                         Label="Taker Fee Rate"
+                                         Variant="Variant.Outlined"
+                                         @bind-Value="_model.TakerFeeRate"
+                                         Min="0m" Max="0.01m"
+                                         Step="0.0001m"
+                                         Format="F4" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Taker fee rate (e.g., 0.0010 = 0.10%). Used for market orders.
+                        </MudText>
+                    </MudItem>
+
+                </MudGrid>
+            </MudExpansionPanel>
+
+        </MudExpansionPanels>
+
+        <MudDivider Class="my-4" />
+
+        <MudStack Row Spacing="2">
+            <MudButton Color="Color.Success" Disabled="@_busy" OnClick="SaveAsync">
+                Save & Apply
+            </MudButton>
+
+            <MudButton Variant="Variant.Outlined" Disabled="@_busy" OnClick="ReloadAsync">
+                Reload
+            </MudButton>
+        </MudStack>
+
+    </MudPaper>
+
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private bool _busy;
+    private BotSettingsEntity _model = new();
+    
+    private string? _pendingToastMessage;
+    private string? _pendingToastType;
+    private bool _shouldShowToast;
+
+    // ✅ Date pickers for nullable DateTime fields
+    private DateTime? _pauseDate
+    {
+        get => _model.PauseUntilUtc;
+        set => _model.PauseUntilUtc = value;
+    }
+
+    private DateTime? _stopDate
+    {
+        get => _model.StopUntilUtc;
+        set => _model.StopUntilUtc = value;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldShowToast)
+        {
+            _shouldShowToast = false;
+            await JS.InvokeVoidAsync("showToast", _pendingToastMessage, _pendingToastType);
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _busy = true;
+        try
+        {
+            var loaded = await SettingsService.LoadAsync(CancellationToken.None);
+            _model = loaded;
+            
+            _logger?.LogInformation(
+                "[UI_RELOAD] Loaded AutoScalperEnabled={Auto}, StrategyModeValue={Strategy}, ExecuteTrades={Exec}",
+                _model.AutoScalperEnabled,
+                _model.StrategyModeValue,
+                _model.ExecuteTrades);
+        }
+        catch (Exception ex)
+        {
+            _pendingToastMessage = $"❌ Load failed: {ex.Message}";
+            _pendingToastType = "error";
+            _shouldShowToast = true;
+        }
+        finally
+        {
+            _loading = false;
+            _busy = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_busy) return;
+
+        _busy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // ✅ CRITICAL FIX: Ensure StrategyModeValue = 4 (AutoScalperD) when AutoScalperEnabled
+            if (_model.AutoScalperEnabled)
+            {
+                _model.StrategyModeValue = 4; // Force to AutoScalperD enum value
+                
+                _logger?.LogInformation(
+                    "[UI_SAVE_FIX] AutoScalperEnabled=true, forcing StrategyModeValue=4 (AutoScalperD)");
+            }
+            
+            // ✅ Log before save
+            _logger?.LogInformation(
+                "[UI_SAVE] Saving AutoScalperEnabled={Auto}, StrategyModeValue={Strategy}, ExecuteTrades={Exec}",
+                _model.AutoScalperEnabled,
+                _model.StrategyModeValue,
+                _model.ExecuteTrades);
+
+            await SettingsService.SaveAsync(_model, CancellationToken.None);
+
+            // ✅ CRITICAL: Reload to confirm persistence
+            await ReloadAsync();
+
+            _pendingToastMessage = $"✅ Settings saved successfully. AutoScalper: {(_model.AutoScalperEnabled ? "ENABLED" : "DISABLED")}, Strategy Mode: {_model.StrategyModeValue}";
+            _pendingToastType = "success";
+            _shouldShowToast = true;
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            _pendingToastMessage = $"❌ Save failed: {ex.Message}";
+            _pendingToastType = "error";
+            _shouldShowToast = true;
+        }
+        finally
+        {
+            _busy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ResetDefaultsAsync()
+    {
+        _busy = true;
+        try
+        {
+            await SettingsService.ResetToDefaultsAsync(CancellationToken.None);
+            await ReloadAsync();
+            
+            _pendingToastMessage = "✅ Defaults restored";
+            _pendingToastType = "success";
+            _shouldShowToast = true;
+        }
+        catch (Exception ex)
+        {
+            _pendingToastMessage = $"❌ Reset failed: {ex.Message}";
+            _pendingToastType = "error";
+            _shouldShowToast = true;
+        }
+        finally
+        {
+            _busy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ✅ Add logger injection
+    [Inject] private ILogger<StrategyAutoScalper>? _logger { get; set; }
+}

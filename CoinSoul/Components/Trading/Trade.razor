@@ -1,0 +1,583 @@
+﻿@page "/trade"
+@rendermode InteractiveServer
+@layout DashboardLayout
+@implements IDisposable
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Trading.Core
+@inject ITradingEngine TradingEngine
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="py-4">
+
+    <!-- HEADER -->
+    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-4">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h4" Style="color:#f1f5f9; font-weight:700;">
+                🚀 Trading Operations Center
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color:#94a3b8;">
+                Live bot control • Real-time monitoring • Risk management
+            </MudText>
+        </MudStack>
+
+        <MudStack Row Spacing="2" AlignItems="AlignItems.Center">
+            @if (_uptime.HasValue)
+            {
+                <MudChip Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Timer">
+                    Uptime: @FormatUptime(_uptime.Value)
+                </MudChip>
+            }
+            @if (State.LastTickAt.HasValue)
+            {
+                <MudChip Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Sync">
+                    Last Tick: @State.LastTickAt.Value.ToLocalTime().ToString("HH:mm:ss")
+                </MudChip>
+            }
+        </MudStack>
+    </MudStack>
+
+    <!-- STATUS BAR -->
+    <MudPaper Class="pa-3 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+            <MudStack Row Spacing="2" AlignItems="AlignItems.Center">
+                <MudChip Color="@GetStatusColor()" 
+                         StartIcon="@GetStatusIcon()"
+                         Size="Size.Medium">
+                    @State.Status
+                </MudChip>
+
+                <MudDivider Vertical="true" FlexItem />
+
+                <MudText Typo="Typo.body1" Style="color:#e2e8f0;">
+                    Mode: <strong style="color:#3b82f6;">@State.Settings.TradeMode</strong>
+                </MudText>
+
+                <MudText Typo="Typo.body1" Style="color:#e2e8f0;">
+                    Strategy: <strong style="color:#22c55e;">@State.Settings.StrategyMode</strong>
+                </MudText>
+            </MudStack>
+
+            @if (_showRiskWarning)
+            {
+                <MudChip Color="Color.Error" Icon="@Icons.Material.Filled.Warning" Size="Size.Small">
+                    ⚠️ Risk Warning
+                </MudChip>
+            }
+        </MudStack>
+    </MudPaper>
+
+    @if (!string.IsNullOrWhiteSpace(State.LastError))
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4" 
+                  Style="background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3);">
+            <MudText Style="color:#ef4444;">@State.LastError</MudText>
+        </MudAlert>
+    }
+
+    <!-- LIVE SESSION SUMMARY -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">Open Positions</MudText>
+                    <MudText Typo="Typo.h5" Style="color:#3b82f6; font-weight:700;">
+                        @_openPositionsCount
+                    </MudText>
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                        Max: @State.Settings.MaxOpenTrades
+                    </MudText>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">Estimated Exposure</MudText>
+                    <MudText Typo="Typo.h5" Style="color:#f59e0b; font-weight:700;">
+                        $@_estimatedExposure.ToString("N2")
+                    </MudText>
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                        Capital at risk
+                    </MudText>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">Live Unrealized P&L</MudText>
+                    <MudText Typo="Typo.h5" Style="@($"{GetPnLColor(_unrealizedPnL)} font-weight:700;")">
+                        @_unrealizedPnL.ToString("+$0.00;-$0.00;$0.00")
+                    </MudText>
+                    <MudText Typo="Typo.caption" Style="@GetPnLColor(_unrealizedPnL)">
+                        @_unrealizedPnLPct.ToString("+0.00%;-0.00%;0.00%")
+                    </MudText>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- MAIN GRID -->
+    <MudGrid>
+
+        <!-- CONTROL PANEL -->
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9; font-weight:600;">
+                    🤖 Bot Control
+                </MudText>
+
+                <MudStack Spacing="2">
+                    <MudButton FullWidth
+                               Size="Size.Large"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               Color="Color.Success"
+                               Disabled="@(State.Status == BotStatus.Running || _commandExecuting)"
+                               OnClick="StartAsync">
+                        Start Bot
+                    </MudButton>
+
+                    <MudButton FullWidth
+                               Size="Size.Large"
+                               StartIcon="@Icons.Material.Filled.Stop"
+                               Color="Color.Error"
+                               Disabled="@(State.Status != BotStatus.Running || _commandExecuting)"
+                               OnClick="StopAsync">
+                        Stop Bot
+                    </MudButton>
+
+                    <MudButton FullWidth
+                               Variant="Variant.Outlined"
+                               StartIcon="@Icons.Material.Filled.Warning"
+                               Color="Color.Error"
+                               Disabled="@(State.Status != BotStatus.Running || _commandExecuting)"
+                               OnClick="ShowEmergencyStopDialog">
+                        Emergency Stop
+                    </MudButton>
+                </MudStack>
+
+                <MudDivider Class="my-4" />
+
+                <MudText Typo="Typo.subtitle2" Style="color:#f1f5f9; font-weight:600;">
+                    ⚙️ Risk Summary
+                </MudText>
+
+                <MudList Dense="true" Style="color:#e2e8f0;">
+                    <MudListItem>
+                        <MudStack Row JustifyContent="JustifyContent.SpaceBetween">
+                            <MudText Typo="Typo.body2" Style="color:#94a3b8;">Max USD / Trade</MudText>
+                            <MudText Typo="Typo.body2" Style="color:#3b82f6; font-weight:600;">
+                                $@State.Settings.MaxUsdPerTrade
+                            </MudText>
+                        </MudStack>
+                    </MudListItem>
+                    <MudListItem>
+                        <MudStack Row JustifyContent="JustifyContent.SpaceBetween">
+                            <MudText Typo="Typo.body2" Style="color:#94a3b8;">Max Open Trades</MudText>
+                            <MudText Typo="Typo.body2" Style="color:#3b82f6; font-weight:600;">
+                                @State.Settings.MaxOpenTrades
+                            </MudText>
+                        </MudStack>
+                    </MudListItem>
+                    <MudListItem>
+                        <MudStack Row JustifyContent="JustifyContent.SpaceBetween">
+                            <MudText Typo="Typo.body2" Style="color:#94a3b8;">Daily Loss Limit</MudText>
+                            <MudText Typo="Typo.body2" Style="color:#ef4444; font-weight:600;">
+                                $@State.Settings.DailyLossLimitUsd
+                            </MudText>
+                        </MudStack>
+                    </MudListItem>
+                </MudList>
+            </MudPaper>
+        </MudItem>
+
+        <!-- LIVE PRICES -->
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9; font-weight:600;">
+                    📈 Live Market Prices
+                </MudText>
+
+                @if (State.Market?.Prices is null || State.Market.Prices.Count == 0)
+                {
+                    <MudText Style="color:#94a3b8;">
+                        Waiting for market data...
+                    </MudText>
+                }
+                else
+                {
+                    <MudTable Items="PriceRows" Dense Hover FixedHeader Height="400px" Style="background: transparent;">
+                        <HeaderContent>
+                            <MudTh Style="color:#f1f5f9;">Symbol</MudTh>
+                            <MudTh Style="color:#f1f5f9;">Price</MudTh>
+                            <MudTh Style="color:#f1f5f9;">Change</MudTh>
+                            <MudTh Style="color:#f1f5f9;">Status</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd Style="color:#e2e8f0; font-weight:600;">@context.Symbol</MudTd>
+                            <MudTd Style="color:#3b82f6; font-weight:600;">@context.Price.ToString("0.######")</MudTd>
+                            <MudTd>
+                                @if (context.ChangePercent.HasValue)
+                                {
+                                    <MudChip Size="Size.Small" Color="@(context.ChangePercent.Value >= 0 ? Color.Success : Color.Error)">
+                                        @context.ChangePercent.Value.ToString("+0.00%;-0.00%;0.00%")
+                                    </MudChip>
+                                }
+                                else
+                                {
+                                    <MudText Style="color:#94a3b8;">—</MudText>
+                                }
+                            </MudTd>
+                            <MudTd>
+                                @if (context.InPosition)
+                                {
+                                    <MudChip Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.TrendingUp">
+                                        Active
+                                    </MudChip>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <!-- LOGS -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-3">
+                    <MudText Typo="Typo.h6" Style="color:#f1f5f9; font-weight:600;">
+                        🧾 Bot Logs (@Logs.Count)
+                    </MudText>
+                    <MudStack Row Spacing="2">
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Outlined"
+                                   Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Clear"
+                                   OnClick="ClearLogs">
+                            Clear View
+                        </MudButton>
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="RefreshLogs">
+                            Refresh
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+
+                <MudDivider Class="mb-2" />
+
+                <div style="max-height:300px; overflow-y:auto; padding:8px;">
+                    @foreach (var log in Logs)
+                    {
+                        <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mb-1">
+                            <MudText Typo="Typo.caption" Style="color:#94a3b8; min-width:80px;">
+                                @log.At.ToLocalTime().ToString("HH:mm:ss")
+                            </MudText>
+                            <MudChip Size="Size.Small" Color="@GetLogLevelColor(log.Level)">
+                                @log.Level
+                            </MudChip>
+                            <MudText Typo="Typo.body2" Style="color:#e2e8f0;">
+                                @log.Message
+                            </MudText>
+                        </MudStack>
+                    }
+                    @if (!Logs.Any())
+                    {
+                        <MudText Style="color:#94a3b8;">No logs available.</MudText>
+                    }
+                </div>
+            </MudPaper>
+        </MudItem>
+
+    </MudGrid>
+
+</MudContainer>
+
+<!-- EMERGENCY STOP DIALOG -->
+<MudDialog @bind-IsVisible="_showEmergencyDialog" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color:#ef4444;">
+            ⚠️ Emergency Stop Confirmation
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Style="color:#e2e8f0;">
+            This will immediately stop the bot and cancel all pending orders.
+        </MudText>
+        <MudText Class="mt-2" Style="color:#f59e0b;">
+            Are you sure you want to proceed?
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showEmergencyDialog = false)" Color="Color.Default">
+            Cancel
+        </MudButton>
+        <MudButton OnClick="ExecuteEmergencyStopAsync" Color="Color.Error" Variant="Variant.Filled">
+            Emergency Stop
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private BotState State = new();
+    private List<BotLogEntry> Logs = new();
+    private Dictionary<string, decimal> _previousPrices = new();
+
+    private bool _commandExecuting;
+    private bool _showEmergencyDialog;
+    private bool _firstRender = true;
+    private TimeSpan? _uptime;
+
+    private int _openPositionsCount;
+    private decimal _estimatedExposure;
+    private decimal _unrealizedPnL;
+    private decimal _unrealizedPnLPct;
+    private bool _showRiskWarning;
+
+    private string? _pendingToastMessage;
+    private string? _pendingToastType;
+
+    private readonly DialogOptions _dialogOptions = new()
+    {
+        CloseButton = true,
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true
+    };
+
+    private IEnumerable<PriceRow> PriceRows =>
+        State.Market?.Prices?
+            .OrderBy(x => x.Key)
+            .Take(20)
+            .Select(x => new PriceRow
+            {
+                Symbol = x.Key.ToUpperInvariant(),
+                Price = x.Value,
+                ChangePercent = CalculateChange(x.Key, x.Value),
+                InPosition = State.OpenPositions?.Any(p => p.Symbol == x.Key) ?? false
+            })
+        ?? Enumerable.Empty<PriceRow>();
+
+    protected override void OnInitialized()
+    {
+        State = TradingEngine.GetState();
+        Logs = State.GetLogs(150).ToList();
+        CalculateMetrics();
+
+        TradingEngine.OnStateChanged += HandleStateChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRender = false;
+        }
+
+        if (!_firstRender && _pendingToastMessage != null)
+        {
+            await JS.InvokeVoidAsync("showToast", _pendingToastMessage, _pendingToastType ?? "info");
+            _pendingToastMessage = null;
+            _pendingToastType = null;
+        }
+    }
+
+    private void HandleStateChanged()
+    {
+        State = TradingEngine.GetState();
+        Logs = State.GetLogs(150).ToList();
+        CalculateMetrics();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void CalculateMetrics()
+    {
+        _openPositionsCount = State.OpenPositions?.Count ?? 0;
+
+        _estimatedExposure = State.OpenPositions?
+            .Sum(p => p.EntryPrice * p.InitialQuantity) ?? 0;
+
+        _unrealizedPnL = 0;
+        if (State.OpenPositions != null && State.Market?.Prices != null)
+        {
+            foreach (var pos in State.OpenPositions)
+            {
+                if (State.Market.Prices.TryGetValue(pos.Symbol, out var currentPrice))
+                {
+                    _unrealizedPnL += pos.UnrealizedPnL(currentPrice);
+                }
+            }
+        }
+
+        _unrealizedPnLPct = _estimatedExposure > 0 ? (_unrealizedPnL / _estimatedExposure) * 100 : 0;
+
+        _showRiskWarning = State.Settings.DailyLossLimitUsd > 0 &&
+                           _unrealizedPnL < 0 &&
+                           Math.Abs(_unrealizedPnL) > (State.Settings.DailyLossLimitUsd * 0.5m);
+
+        if (State.Status == BotStatus.Running && State.LastTickAt.HasValue)
+        {
+            _uptime = DateTime.UtcNow - State.LastTickAt.Value;
+        }
+        else
+        {
+            _uptime = null;
+        }
+    }
+
+    private decimal? CalculateChange(string symbol, decimal currentPrice)
+    {
+        if (_previousPrices.TryGetValue(symbol, out var prevPrice) && prevPrice > 0)
+        {
+            return ((currentPrice - prevPrice) / prevPrice) * 100;
+        }
+
+        _previousPrices[symbol] = currentPrice;
+        return null;
+    }
+
+    private async Task StartAsync()
+    {
+        _commandExecuting = true;
+        StateHasChanged();
+
+        try
+        {
+            await TradingEngine.EnqueueAsync(new StartBotCommand());
+            _pendingToastMessage = "✅ Bot started successfully";
+            _pendingToastType = "success";
+        }
+        catch (Exception ex)
+        {
+            _pendingToastMessage = $"❌ Start failed: {ex.Message}";
+            _pendingToastType = "error";
+        }
+        finally
+        {
+            _commandExecuting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopAsync()
+    {
+        _commandExecuting = true;
+        StateHasChanged();
+
+        try
+        {
+            await TradingEngine.EnqueueAsync(new StopBotCommand());
+            _pendingToastMessage = "✅ Bot stopped successfully";
+            _pendingToastType = "success";
+        }
+        catch (Exception ex)
+        {
+            _pendingToastMessage = $"❌ Stop failed: {ex.Message}";
+            _pendingToastType = "error";
+        }
+        finally
+        {
+            _commandExecuting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowEmergencyStopDialog()
+    {
+        _showEmergencyDialog = true;
+    }
+
+    private async Task ExecuteEmergencyStopAsync()
+    {
+        _showEmergencyDialog = false;
+        _commandExecuting = true;
+        StateHasChanged();
+
+        try
+        {
+            await TradingEngine.EnqueueAsync(new EmergencyStopCommand("Manual emergency stop from UI"));
+            _pendingToastMessage = "🛑 Emergency stop executed";
+            _pendingToastType = "warning";
+        }
+        catch (Exception ex)
+        {
+            _pendingToastMessage = $"❌ Emergency stop failed: {ex.Message}";
+            _pendingToastType = "error";
+        }
+        finally
+        {
+            _commandExecuting = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task RefreshLogs()
+    {
+        Logs = TradingEngine.GetState().GetLogs(150).ToList();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void ClearLogs()
+    {
+        Logs.Clear();
+        StateHasChanged();
+    }
+
+    private static Color GetStatusColor()
+    {
+        return Color.Success; // Simplified - extend based on State.Status
+    }
+
+    private static string GetStatusIcon()
+    {
+        return Icons.Material.Filled.PlayArrow; // Simplified
+    }
+
+    private static string GetPnLColor(decimal value)
+    {
+        if (value > 0)
+            return "color:#22c55e; font-weight:700;";
+        if (value < 0)
+            return "color:#ef4444; font-weight:700;";
+        return "color:#94a3b8;";
+    }
+
+    private static Color GetLogLevelColor(string? level)
+    {
+        return level?.ToUpperInvariant() switch
+        {
+            "INFO" => Color.Info,
+            "WARN" => Color.Warning,
+            "ERROR" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private static string FormatUptime(TimeSpan uptime)
+    {
+        if (uptime.TotalHours >= 1)
+            return $"{(int)uptime.TotalHours}h {uptime.Minutes}m";
+        if (uptime.TotalMinutes >= 1)
+            return $"{uptime.Minutes}m {uptime.Seconds}s";
+        return $"{uptime.Seconds}s";
+    }
+
+    public void Dispose()
+    {
+        TradingEngine.OnStateChanged -= HandleStateChanged;
+    }
+
+    private sealed class PriceRow
+    {
+        public string Symbol { get; set; } = "";
+        public decimal Price { get; set; }
+        public decimal? ChangePercent { get; set; }
+        public bool InPosition { get; set; }
+    }
+}

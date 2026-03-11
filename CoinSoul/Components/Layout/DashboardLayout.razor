@@ -1,0 +1,155 @@
+﻿@inherits LayoutComponentBase
+@using CoinSoul.Entities
+
+<MudThemeProvider Theme="_darkTheme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+ <NotificationHost />
+<MudLayout>
+    <MudAppBar Elevation="0" Dense="false" Style="background-color: #0b1220; border-bottom: 1px solid #1e293b;">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+        <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Primary" Size="Size.Large" Class="mr-2" />
+        <MudText Typo="Typo.h6">
+            <span style="color: #6366f1; font-weight: 700;">CoinSoul</span>
+            <span style="color: #94a3b8; font-weight: 400; font-size: 14px;"> • AutoScalper</span>
+        </MudText>
+
+        <MudSpacer />
+
+        <MudChip Variant="Variant.Outlined" Size="Size.Small" Icon="@Icons.Material.Filled.Person" Color="Color.Primary">
+            Admin
+        </MudChip>
+
+        <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen"
+               Variant="DrawerVariant.Persistent"
+               Elevation="0"
+               ClipMode="DrawerClipMode.Never"
+               Style="background-color: #111827;">
+
+        <div class="pa-4 mb-2">
+            <MudText Typo="Typo.caption" Style="color: #64748b; font-weight: 600; letter-spacing: 0.5px;">
+                DASHBOARD
+            </MudText>
+        </div>
+
+        <MudNavMenu Dense="false" Class="pa-2">
+            <MudNavLink Href="/index" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+                Overview
+            </MudNavLink>
+            
+            <MudNavLink Href="/trading/live" Icon="@Icons.Material.Filled.ShowChart">
+                Live Monitor
+            </MudNavLink>
+            
+            <MudNavLink Href="/trading/performance" Icon="@Icons.Material.Filled.Assessment">
+                Performance
+            </MudNavLink>
+            
+            <MudNavLink Href="/trading/analytics" Icon="@Icons.Material.Filled.BarChart">
+                Analytics
+            </MudNavLink>
+
+            <MudDivider Class="my-3" />
+
+            <div class="pa-4 mb-2">
+                <MudText Typo="Typo.caption" Style="color: #64748b; font-weight: 600; letter-spacing: 0.5px;">
+                    TRADING
+                </MudText>
+            </div>
+
+            <MudNavLink Href="/trade" Icon="@Icons.Material.Filled.PlayCircle">
+                TRADING Console
+            </MudNavLink>
+            
+            <MudNavLink Href="/trading/strategy-auto" Icon="@Icons.Material.Filled.Bolt">
+                Strategy
+            </MudNavLink>
+
+            <MudNavLink Href="/trading/opentrades" Icon="@Icons.Material.Filled.ListAlt">
+                Positions
+            </MudNavLink>
+            
+            <MudNavLink Href="/trading/history" Icon="@Icons.Material.Filled.History">
+                History
+            </MudNavLink>
+            
+            <MudNavLink Href="/trading/events" Icon="@Icons.Material.Filled.ReceiptLong">
+                Events
+            </MudNavLink>
+
+            <MudDivider Class="my-3" />
+
+            <div class="pa-4 mb-2">
+                <MudText Typo="Typo.caption" Style="color: #64748b; font-weight: 600; letter-spacing: 0.5px;">
+                    ACCOUNT
+                </MudText>
+            </div>
+            
+            <MudNavLink Href="/trading/account" Icon="@Icons.Material.Filled.AccountBalanceWallet">
+                Portfolio
+            </MudNavLink>
+            
+            <MudNavLink Href="/trading/settings" Icon="@Icons.Material.Filled.Settings">
+                Settings
+            </MudNavLink>
+
+            <MudDivider Class="my-3" />
+            
+            <MudNavLink Href="/login" Icon="@Icons.Material.Filled.Logout" Style="color: #ef4444;">
+                Logout
+            </MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+        <MudMainContent Class="main-content">
+        <LiveStatsBar />
+        @Body
+    </MudMainContent>
+</MudLayout>
+@code {
+    private bool _drawerOpen = true;
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private readonly MudTheme _darkTheme = new()
+    {
+        PaletteDark = new PaletteDark
+        {
+            Black = "#0b1220",
+            Background = "#0f172a",
+            Surface = "#1e293b",
+            DrawerBackground = "#111827",
+            DrawerText = "#e5e7eb",
+            DrawerIcon = "#9ca3af",
+            AppbarBackground = "#0b1220",
+            AppbarText = "#e5e7eb",
+            
+            Primary = "#6366f1",
+            PrimaryContrastText = "#ffffff",
+            Secondary = "#8b5cf6",
+            Info = "#3b82f6",
+            Success = "#22c55e",
+            Warning = "#f59e0b",
+            Error = "#ef4444",
+            
+            TextPrimary = "#e5e7eb",
+            TextSecondary = "#9ca3af",
+            TextDisabled = "#6b7280",
+            
+            Divider = "#374151",
+            TableLines = "#374151",
+            TableStriped = "rgba(255,255,255,0.02)",
+            TableHover = "rgba(99,102,241,0.08)",
+            
+            LinesDefault = "#374151",
+            LinesInputs = "#374151"
+        }
+    };
+}

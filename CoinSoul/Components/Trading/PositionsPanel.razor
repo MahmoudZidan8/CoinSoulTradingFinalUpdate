@@ -1,0 +1,152 @@
+﻿@page "/trading/positions"
+@layout DashboardLayout
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Entities
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<CoinSoul.Repository.DbContext.CoinSoulDbContext> DbFactory
+@inject CoinSoul.Trading.Core.ITradingEngine TradingEngine
+@inject IJSRuntime JS
+
+<MudPaper Class="pa-4 settings-card" Style="background-color:black">
+
+    <MudStack Row AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h6" Class="page-title">
+            📌 Database Open Positions
+        </MudText>
+
+        <MudButton Size="Size.Small"
+                   Variant="Variant.Outlined"
+                   OnClick="ReloadAsync"
+                   Disabled="_loading">
+            ↻ Refresh
+        </MudButton>
+    </MudStack>
+
+    <MudDivider Class="my-3" />
+
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudTable Items="_rows"
+                  Dense="true"
+                  Hover="true"
+                  Bordered="true">
+
+            <HeaderContent>
+                <MudTh>Symbol</MudTh>
+                <MudTh Align="Align.Right">Entry</MudTh>
+                <MudTh Align="Align.Right">Qty</MudTh>
+                <MudTh>Opened</MudTh>
+                <MudTh Align="Align.Right">Age (min)</MudTh>
+                <MudTh Align="Align.Right">Last</MudTh>
+                <MudTh Align="Align.Right">Unrealized</MudTh>
+            </HeaderContent>
+
+            <RowTemplate>
+                <MudTd>@context.Symbol</MudTd>
+
+                <MudTd Align="Align.Right">
+                    @context.EntryPrice.ToString("0.########")
+                </MudTd>
+
+                <MudTd Align="Align.Right">
+                    @context.Quantity.ToString("0.########")
+                </MudTd>
+
+                <MudTd>
+                    @context.OpenedLocal
+                </MudTd>
+
+                <MudTd Align="Align.Right">
+                    @context.AgeMinutes.ToString("0.0")
+                </MudTd>
+
+                <MudTd Align="Align.Right">
+                    @context.LastPrice.ToString("0.########")
+                </MudTd>
+
+                <MudTd Align="Align.Right"
+                       Style="@($"color:{GetPnLColor(context.Unrealized)}; font-weight:700;")">
+                    @context.Unrealized.ToString("0.00")
+                </MudTd>
+            </RowTemplate>
+
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+
+    private bool _loading;
+    private List<RowVm> _rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        await using var db = DbFactory.CreateDbContext();
+
+        var positions = await db.Positions
+            .AsNoTracking()
+            .Where(p => p.IsOpen)
+            .OrderByDescending(p => p.OpenedAtUtc)
+            .Take(50)
+            .ToListAsync();
+
+        var state = TradingEngine.GetState();
+        var prices = state?.Market?.Prices;
+
+        _rows = positions.Select(p =>
+        {
+            decimal last = 0m;
+
+            if (prices != null && prices.TryGetValue(p.Symbol, out var px))
+                last = px;
+
+            var pnl = last > 0
+                ? (last - p.EntryPrice) * p.Quantity
+                : 0m;
+
+            return new RowVm
+            {
+                Symbol = p.Symbol,
+                EntryPrice = p.EntryPrice,
+                Quantity = p.Quantity,
+                OpenedLocal = p.OpenedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                AgeMinutes = (DateTime.UtcNow - p.OpenedAtUtc).TotalMinutes,
+                LastPrice = last,
+                Unrealized = pnl
+            };
+        }).ToList();
+
+        _loading = false;
+    }
+
+    private string GetPnLColor(decimal pnl)
+    {
+        if (pnl > 0) return "#22c55e";
+        if (pnl < 0) return "#ef4444";
+        return "#f59e0b";
+    }
+
+    private class RowVm
+    {
+        public string Symbol { get; set; } = "";
+        public decimal EntryPrice { get; set; }
+        public decimal Quantity { get; set; }
+        public string OpenedLocal { get; set; } = "";
+        public double AgeMinutes { get; set; }
+        public decimal LastPrice { get; set; }
+        public decimal Unrealized { get; set; }
+    }
+}

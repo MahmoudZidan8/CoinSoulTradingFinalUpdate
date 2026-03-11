@@ -1,0 +1,56 @@
+﻿/* AppBar */
+.dashboard-appbar {
+    height: 64px;
+    background: linear-gradient(90deg, #020617, #0f172a);
+}
+
+/* Sidebar */
+.dashboard-drawer {
+    width: 240px;
+    background: linear-gradient(180deg, #020617, #0f172a);
+    border-right: 1px solid #1e293b;
+}
+
+/* Main Content */
+.dashboard-content {
+    margin-top: 64px;
+    margin-left: 240px;
+    padding: 32px;
+    background: radial-gradient(circle at top, #020617, #000000);
+    min-height: calc(100vh - 64px);
+
+}
+
+/* Cards */
+.dashboard-panel {
+    background: linear-gradient(145deg, #0f172a, #020617);
+    border-radius: 16px;
+    border: 1px solid #1e293b;
+    color: #e5e7eb;
+}
+
+/* Spot Balance rows */
+.asset-row {
+    display: flex;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid #1e293b;
+}
+
+    .asset-row:last-child {
+        border-bottom: none;
+    }
+
+.asset-info {
+    margin-left: 12px;
+}
+
+    .asset-info span {
+        font-size: 13px;
+        color: #94a3b8;
+    }
+
+.asset-value {
+    margin-left: auto;
+    font-weight: 600;
+}

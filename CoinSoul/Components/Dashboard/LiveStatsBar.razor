@@ -1,0 +1,110 @@
+@using CoinSoul.Trading.Core
+@using CoinSoul.Trading.Engine
+@implements IDisposable
+@inject PortfolioStateService PortfolioState
+@inject PerformanceMetricsService MetricsService
+
+<div class="live-stats-bar fade-in">
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Primary" />
+    }
+    else if (_state != null)
+    {
+        <div class="stat-item">
+            <span class="stat-label">Total Equity</span>
+            <span class="stat-value">
+                $@_state.Portfolio.TotalEquityUsdt.ToString("N2")
+            </span>
+        </div>
+
+        <div class="stat-item">
+            <span class="stat-label">Daily P&L</span>
+            <span class="stat-value @GetPnlClass(_dailyPnl)">
+                @_dailyPnl.ToString("+$0.00;-$0.00;$0.00")
+            </span>
+        </div>
+
+        <div class="stat-item">
+            <span class="stat-label">Drawdown</span>
+            <span class="stat-value @GetPnlClass(_state.Risk.DrawdownPct)">
+                @_state.Risk.DrawdownPct.ToString("+0.00%;-0.00%;0.00%")
+            </span>
+        </div>
+
+        <div class="stat-item">
+            <span class="stat-label">Open Positions</span>
+            <span class="stat-value" style="color: var(--accent);">
+                @_openPositions
+            </span>
+        </div>
+
+        <div class="stat-item">
+            <span class="stat-label">Risk Status</span>
+            <MudChip Color="@GetRiskColor()" Variant="Variant.Filled" Size="Size.Small">
+                @_state.Risk.Status
+            </MudChip>
+        </div>
+
+        <div class="stat-item">
+            <span class="stat-label">Today Trades</span>
+            <span class="stat-value">
+                @_todayTrades
+            </span>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private DashboardPortfolioStateDto? _state;
+    private decimal _dailyPnl;
+    private int _openPositions;
+    private int _todayTrades;
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+        
+        _refreshTimer = new Timer(async _ =>
+        {
+            await LoadDataAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        
+        try
+        {
+            _state = await PortfolioState.GetDashboardStateAsync(CancellationToken.None);
+            _dailyPnl = _state.Portfolio.TotalEquityUsdt - _state.Risk.StartOfDayEquityUsdt;
+
+            var metrics = await MetricsService.GetMetricsAsync(CancellationToken.None);
+            _openPositions = metrics.OpenPositions;
+            _todayTrades = metrics.TradesToday;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string GetPnlClass(decimal value) => value >= 0 ? "positive" : "negative";
+    
+    private Color GetRiskColor() => _state?.Risk.Status switch
+    {
+        "STOPPED" => Color.Error,
+        "PAUSED" => Color.Warning,
+        "WARNING" => Color.Warning,
+        _ => Color.Success
+    };
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

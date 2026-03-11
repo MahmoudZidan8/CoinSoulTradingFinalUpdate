@@ -1,0 +1,341 @@
+﻿@page "/trading/analytics"
+@rendermode InteractiveServer
+@layout DashboardLayout
+@implements IDisposable
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Entities
+@using CoinSoul.Repository.DbContext
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<CoinSoulDbContext> DbFactory
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="py-4">
+
+    <!-- HEADER -->
+    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-4">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h4" Style="color:#f1f5f9; font-weight:700;">
+                📊 Trading Analytics
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color:#94a3b8;">
+                Historical performance analysis from closed positions
+            </MudText>
+        </MudStack>
+
+        <MudButton Variant="Variant.Outlined" 
+                   Color="Color.Primary" 
+                   Size="Size.Small" 
+                   OnClick="ReloadAsync" 
+                   Disabled="_loading"
+                   StartIcon="@Icons.Material.Filled.Refresh">
+            Refresh
+        </MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <!-- SUMMARY CARDS -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" md="3">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">30-Day Net P&L</MudText>
+                        <MudText Typo="Typo.h5" Style="@GetPnLColor(_summary.NetPnL30d)">
+                            @_summary.NetPnL30d.ToString("+$0.00;-$0.00;$0.00")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            @_summary.Trades30d trades
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Best Day</MudText>
+                        <MudText Typo="Typo.h5" Style="color:#22c55e; font-weight:700;">
+                            $@_summary.BestDay.ToString("N2")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Maximum daily profit
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Worst Day</MudText>
+                        <MudText Typo="Typo.h5" Style="color:#ef4444; font-weight:700;">
+                            $@_summary.WorstDay.ToString("N2")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Maximum daily loss
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Avg Daily P&L</MudText>
+                        <MudText Typo="Typo.h5" Style="@GetPnLColor(_summary.AvgDaily)">
+                            @_summary.AvgDaily.ToString("+$0.00;-$0.00;$0.00")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Expected value per day
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- EQUITY CURVE -->
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9; font-weight:600;">
+                📈 Cumulative Equity Curve
+            </MudText>
+
+            @if (_equityLabels.Any())
+            {
+                <div style="position:relative; height:300px;">
+                    <canvas id="chart-equity" height="300"></canvas>
+                </div>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Style="background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.3);">
+                    <MudText Style="color:#3b82f6;">No closed positions available for equity curve.</MudText>
+                </MudAlert>
+            }
+        </MudPaper>
+
+        <!-- DAILY PNL -->
+        <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9; font-weight:600;">
+                📊 Daily P&L (Last 30 Days)
+            </MudText>
+
+            @if (_dailyLabels.Any())
+            {
+                <div style="position:relative; height:300px;">
+                    <canvas id="chart-daily" height="300"></canvas>
+                </div>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Style="background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.3);">
+                    <MudText Style="color:#3b82f6;">No closed positions in the last 30 days.</MudText>
+                </MudAlert>
+            }
+        </MudPaper>
+    }
+
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private bool _firstRender = true;
+
+    private List<string> _equityLabels = new();
+    private List<decimal> _equityValues = new();
+
+    private List<string> _dailyLabels = new();
+    private List<decimal> _dailyValues = new();
+
+    private SummaryData _summary = new();
+
+    private bool _pendingEquityRender;
+    private bool _pendingDailyRender;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRender = false;
+        }
+
+        if (!_firstRender && _pendingEquityRender)
+        {
+            await RenderEquityChartAsync();
+            _pendingEquityRender = false;
+        }
+
+        if (!_firstRender && _pendingDailyRender)
+        {
+            await RenderDailyChartAsync();
+            _pendingDailyRender = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync(CancellationToken.None);
+
+            var now = DateTime.UtcNow;
+            var thirtyDaysAgo = now.AddDays(-30);
+
+            // Get all closed positions
+            var allClosed = await db.Positions
+                .AsNoTracking()
+                .Where(p => !p.IsOpen && p.ClosedAtUtc != null)
+                .OrderBy(p => p.ClosedAtUtc)
+                .Select(p => new { p.ClosedAtUtc, p.NetPnlUsdt })
+                .ToListAsync();
+
+            // Get 30-day closed positions
+            var closed30d = allClosed
+                .Where(p => p.ClosedAtUtc >= thirtyDaysAgo)
+                .ToList();
+
+            // Build equity curve (all time)
+            decimal cumulative = 0m;
+            _equityLabels.Clear();
+            _equityValues.Clear();
+
+            foreach (var p in allClosed)
+            {
+                cumulative += p.NetPnlUsdt;
+                _equityLabels.Add(p.ClosedAtUtc!.Value.ToLocalTime().ToString("MM-dd HH:mm"));
+                _equityValues.Add(cumulative);
+            }
+
+            // Build daily PnL (30 days) - Using database grouping
+            var dailyQuery = await db.Positions
+                .AsNoTracking()
+                .Where(p => !p.IsOpen && p.ClosedAtUtc != null && p.ClosedAtUtc >= thirtyDaysAgo)
+                .GroupBy(p => p.ClosedAtUtc!.Value.Date)
+                .Select(g => new
+                {
+                    Day = g.Key,
+                    Pnl = g.Sum(x => x.NetPnlUsdt)
+                })
+                .OrderBy(x => x.Day)
+                .ToListAsync();
+
+            _dailyLabels = dailyQuery.Select(x => x.Day.ToString("MM-dd")).ToList();
+            _dailyValues = dailyQuery.Select(x => x.Pnl).ToList();
+
+            // Calculate summary
+            _summary.Trades30d = closed30d.Count;
+            _summary.NetPnL30d = closed30d.Sum(p => p.NetPnlUsdt);
+            _summary.BestDay = dailyQuery.Any() ? dailyQuery.Max(x => x.Pnl) : 0;
+            _summary.WorstDay = dailyQuery.Any() ? dailyQuery.Min(x => x.Pnl) : 0;
+            _summary.AvgDaily = dailyQuery.Any() ? dailyQuery.Average(x => x.Pnl) : 0;
+
+            // Mark charts for rendering
+            _pendingEquityRender = _equityLabels.Any();
+            _pendingDailyRender = _dailyLabels.Any();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Load failed: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RenderEquityChartAsync()
+    {
+        try
+        {
+            var datasets = new object[]
+            {
+                new
+                {
+                    label = "Equity (USDT)",
+                    data = _equityValues
+                }
+            };
+
+            // Blazor cannot marshal JS function callbacks. Formatting is handled in JS.
+            await JS.InvokeVoidAsync("coinSoulCharts.render",
+                "equity",
+                "line",
+                _equityLabels.ToArray(),
+                datasets,
+                new { });
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Equity chart render failed: {ex.Message}");
+        }
+    }
+
+    private async Task RenderDailyChartAsync()
+    {
+        try
+        {
+            var datasets = new object[]
+            {
+                new
+                {
+                    label = "Daily P&L (USDT)",
+                    data = _dailyValues,
+                    backgroundColor = _dailyValues.Select(v => v >= 0 ? "#22c55e" : "#ef4444").ToArray()
+                }
+            };
+
+            await JS.InvokeVoidAsync("coinSoulCharts.render",
+                "daily",
+                "bar",
+                _dailyLabels.ToArray(),
+                datasets,
+                new { });
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Daily chart render failed: {ex.Message}");
+        }
+    }
+
+    private static string GetPnLColor(decimal value)
+    {
+        if (value > 0)
+            return "color:#22c55e; font-weight:700;";
+        if (value < 0)
+            return "color:#ef4444; font-weight:700;";
+        return "color:#94a3b8;";
+    }
+
+    public void Dispose()
+    {
+        JS.InvokeVoidAsync("coinSoulCharts.destroy", "equity");
+        JS.InvokeVoidAsync("coinSoulCharts.destroy", "daily");
+    }
+
+    private sealed class SummaryData
+    {
+        public int Trades30d { get; set; }
+        public decimal NetPnL30d { get; set; }
+        public decimal BestDay { get; set; }
+        public decimal WorstDay { get; set; }
+        public decimal AvgDaily { get; set; }
+    }
+}

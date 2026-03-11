@@ -1,0 +1,55 @@
+﻿@using CoinSoul.Trading.Core
+@inject ITradingEngine TradingEngine
+
+<MudPaper Class="pa-4" Style="background-color:black">
+
+    <MudText Typo="Typo.h6" Class="mb-2">📈 Performance</MudText>
+
+    <MudGrid>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Uptime</MudText>
+            <MudText Typo="Typo.h6">
+                @State.Uptime.ToString(@"hh\:mm\:ss")
+            </MudText>
+        </MudItem>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Ticks</MudText>
+            <MudText Typo="Typo.h6">
+                @State.TickCount
+            </MudText>
+        </MudItem>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Open Positions</MudText>
+            <MudText Typo="Typo.h6">
+                @State.OpenPositions.Count(p => !p.IsClosed)
+            </MudText>
+        </MudItem>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Daily Loss (USD)</MudText>
+            <MudText Typo="Typo.h6" Color="Color.Error">
+                @State.DailyLossUsd.ToString("0.00")
+            </MudText>
+        </MudItem>
+
+    </MudGrid>
+
+</MudPaper>
+
+@code {
+    private BotState State = new();
+
+    protected override void OnInitialized()
+    {
+        State = TradingEngine.GetState();
+
+        TradingEngine.OnStateChanged += () =>
+        {
+            State = TradingEngine.GetState();
+            InvokeAsync(StateHasChanged);
+        };
+    }
+}

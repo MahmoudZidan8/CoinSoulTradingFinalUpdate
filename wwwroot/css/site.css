@@ -1,0 +1,95 @@
+/* Fix MudBlazor popover z-index issues */
+.mud-popover,
+.mud-overlay,
+.mud-picker-content,
+.mud-select-popover,
+.mud-popover-open {
+    z-index: 4000 !important;
+}
+
+.mud-dialog {
+    z-index: 5000 !important;
+}
+
+/* Ensure main content doesn't clip popovers */
+.mud-main-content {
+    overflow: visible !important;
+}
+
+.dashboard-content {
+    overflow: visible !important;
+}
+
+/* Fix for date picker and select dropdowns */
+.mud-picker-open,
+.mud-select-input {
+    z-index: 3000 !important;
+}
+
+/* Analytics chart container */
+.chart-container {
+    min-height: 350px;
+    height: 350px;
+    position: relative;
+    overflow: visible;
+}
+
+.chart-container canvas {
+    max-height: 100%;
+}
+
+/* Prevent page expansion from charts */
+.analytics-page,
+.account-page,
+.live-monitor-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    overflow-x: hidden;
+}/* Fix MudBlazor popover z-index issues */
+.mud-popover,
+.mud-overlay,
+.mud-picker-content,
+.mud-select-popover,
+.mud-popover-open {
+    z-index: 4000 !important;
+}
+
+.mud-dialog {
+    z-index: 5000 !important;
+}
+
+/* Ensure main content doesn't clip popovers */
+.mud-main-content {
+    overflow: visible !important;
+}
+
+.dashboard-content {
+    overflow: visible !important;
+}
+
+/* Fix for date picker and select dropdowns */
+.mud-picker-open,
+.mud-select-input {
+    z-index: 3000 !important;
+}
+
+/* Analytics chart container */
+.chart-container {
+    min-height: 350px;
+    height: 350px;
+    position: relative;
+    overflow: visible;
+}
+
+.chart-container canvas {
+    max-height: 100%;
+}
+
+/* Prevent page expansion from charts */
+.analytics-page,
+.account-page,
+.live-monitor-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    overflow-x: hidden;
+}

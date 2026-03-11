@@ -1,0 +1,55 @@
+﻿@using MudBlazor
+
+<MudDialog Class="trading-dialog">
+    <DialogContent>
+        <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="pa-4">
+
+            <MudIcon Icon="@GetIcon()"
+                     Size="Size.Large"
+                     Color="@GetColor()" />
+
+            <MudText Typo="Typo.h6" Align="Align.Center">
+                @Message
+            </MudText>
+
+        </MudStack>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton OnClick="Close"
+                   Variant="Variant.Filled"
+                   Color="@GetColor()">
+            OK
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public Severity Severity { get; set; }
+
+    private void Close()
+    {
+        MudDialog.Close();
+    }
+
+    private string GetIcon() => Severity switch
+    {
+        Severity.Success => Icons.Material.Filled.CheckCircle,
+        Severity.Error => Icons.Material.Filled.Error,
+        Severity.Warning => Icons.Material.Filled.Warning,
+        _ => Icons.Material.Filled.Info
+    };
+
+    private Color GetColor() => Severity switch
+    {
+        Severity.Success => Color.Success,
+        Severity.Error => Color.Error,
+        Severity.Warning => Color.Warning,
+        _ => Color.Info
+    };
+}

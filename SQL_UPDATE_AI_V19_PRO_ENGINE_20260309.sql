@@ -1,0 +1,25 @@
+
+UPDATE dbo.BotSettings
+SET TargetUsdPerTrade = 18,
+    MinUsdPerTrade = 18,
+    MaxOpenTrades = 20,
+    TradeHistoryTopSymbols = 300,
+    QueueSize = 120,
+    DeepScanTopN = 20,
+    TierAConfidenceThreshold = 0.82,
+    TierBConfidenceThreshold = 0.68,
+    TierCConfidenceThreshold = 0.52,
+    ExpectedNetAfterFeesUsd = 0.004,
+    FinalEntryMaxSpreadPct = 0.35,
+    FinalEntryMinOrderbookImbalance = 1.005,
+    FinalEntryMinMomentumPct = 0.001,
+    ApiBudgetPerMinute = 900,
+    MomentumMinPct = -0.35,
+    MinVolume24hUsd = 50000,
+    SpikeBlockAtrPct = 2.40,
+    SpikeBlock1mMovePct = 1.80,
+    CooldownAfterEntrySeconds = 2,
+    CooldownAfterLossSeconds = 15,
+    CooldownSameSymbolSeconds = 20,
+    MaxSpreadPct = 0.60
+WHERE Id >= 1;

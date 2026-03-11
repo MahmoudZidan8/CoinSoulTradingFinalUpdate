@@ -1,0 +1,48 @@
+﻿@* @page "/" *@
+@attribute [Authorize]
+
+@inject ITradingEngine TradingEngine
+@using CoinSoul.Trading.Core
+@using Microsoft.AspNetCore.Authorization
+
+<MudPaper Class="pa-4" Style="background-color:black">
+
+    <MudText Typo="Typo.h5">Dashboard</MudText>
+
+    <MudDivider Class="my-3" />
+
+    <MudText>
+        <b>Status:</b>
+        <MudChip Color="@StatusColor">
+            @State.Status
+        </MudChip>
+    </MudText>
+
+    <MudText Class="mt-2">
+        <b>Last Tick:</b>
+        @(State.LastTickAt?.ToLocalTime().ToString("HH:mm:ss") ?? "—")
+    </MudText>
+
+</MudPaper>
+
+@code {
+    BotState State = new();
+
+    Color StatusColor => State.Status switch
+    {
+        BotStatus.Running => Color.Success,
+        BotStatus.Error => Color.Error,
+        _ => Color.Default
+    };
+
+    protected override void OnInitialized()
+    {
+        State = TradingEngine.GetState();
+
+        TradingEngine.OnStateChanged += async () =>
+        {
+            State = TradingEngine.GetState();
+            await InvokeAsync(StateHasChanged);
+        };
+    }
+}

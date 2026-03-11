@@ -1,0 +1,502 @@
+﻿@page "/trading/performance"
+@rendermode InteractiveServer
+@layout DashboardLayout
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Trading.Engine
+@using Microsoft.JSInterop
+@inject PerformanceMetricsService MetricsService
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="py-4" Style="background-color:black">
+
+    <!-- HEADER + FILTERS -->
+    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-4">
+        <MudText Typo="Typo.h4" Style="color:#f1f5f9; font-weight:700;">
+            📊 Institutional Performance Analytics
+        </MudText>
+        <MudButton Variant="Variant.Outlined" 
+                   Color="Color.Primary" 
+                   Size="Size.Small" 
+                   OnClick="RefreshAsync" 
+                   Disabled="_loading"
+                   StartIcon="@Icons.Material.Filled.Refresh">
+            Refresh
+        </MudButton>
+    </MudStack>
+
+    <!-- FILTERS -->
+    <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_fromDate"
+                               Label="From Date"
+                               Editable="true"
+                               PickerVariant="PickerVariant.Dialog"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               Class="dark-date" />
+
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_toDate"
+                               Label="To Date"
+                               Editable="true"
+                               PickerVariant="PickerVariant.Dialog"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               Class="dark-date" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" Label="Symbol" @bind-Value="_selectedSymbol" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="@("")">All Symbols</MudSelectItem>
+                    @foreach (var sym in _availableSymbols)
+                    {
+                        <MudSelectItem T="string" Value="@sym">@sym</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudButton Color="Color.Success" Variant="Variant.Filled" FullWidth OnClick="ExportCsvAsync" Disabled="_loading">
+                    📥 Export CSV
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_metrics != null)
+    {
+        <!-- SUMMARY CARDS (Existing) -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" md="3">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Today P&L</MudText>
+                        <MudText Typo="Typo.h5" Style="@GetPnLColor(_metrics.TodayNetPnl)">
+                            @_metrics.TodayNetPnl.ToString("+$0.00;-$0.00;$0.00")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            @_metrics.TradesToday trades
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">30 Days P&L</MudText>
+                        <MudText Typo="Typo.h5" Style="@GetPnLColor(_metrics.NetPnl30Days)">
+                            @_metrics.NetPnl30Days.ToString("+$0.00;-$0.00;$0.00")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            @_metrics.Trades30Days trades
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Total P&L</MudText>
+                        <MudText Typo="Typo.h5" Style="@GetPnLColor(_metrics.NetProfit)">
+                            @_metrics.NetProfit.ToString("+$0.00;-$0.00;$0.00")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            @_metrics.TotalTrades trades
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Sharpe Ratio</MudText>
+                        <MudText Typo="Typo.h5" Style="color:#3b82f6; font-weight:700;">
+                            @_metrics.SharpeRatio.ToString("0.00")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            Risk-adjusted
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- ADVANCED RISK METRICS -->
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;font-weight:600;">
+                🎯 Advanced Risk Metrics
+            </MudText>
+
+            <MudGrid Spacing="3">
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Sortino Ratio</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#22c55e;">@_metrics.SortinoRatio.ToString("0.00")</MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Calmar Ratio</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#3b82f6;">@_metrics.CalmarRatio.ToString("0.00")</MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Recovery Factor</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#10b981;">@_metrics.RecoveryFactor.ToString("0.00")</MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Risk/Reward</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#f59e0b;">@_metrics.RiskRewardRatio.ToString("0.00")</MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Best Day</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#22c55e;">$@_metrics.BestDay.ToString("0.00")</MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Worst Day</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#ef4444;">$@_metrics.WorstDay.ToString("0.00")</MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Win Streak</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#22c55e;">@_metrics.WinStreakMax</MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Loss Streak</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#ef4444;">@_metrics.LossStreakMax</MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Avg Daily P&L</MudText>
+                        <MudText Typo="Typo.h6" Style="@GetPnLColor(_metrics.AvgDailyPnl)">
+                            @_metrics.AvgDailyPnl.ToString("$0.00")
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="6" md="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Std Dev</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#94a3b8;">@_metrics.StdDevDailyReturn.ToString("0.00")</MudText>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <!-- EQUITY CURVE -->
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;font-weight:600;">
+                📈 Equity & Drawdown
+            </MudText>
+            <canvas id="equityChart" height="120"></canvas>
+        </MudPaper>
+
+        <!-- DAILY P&L CHART -->
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;font-weight:600;">
+                📊 Daily P&L
+            </MudText>
+            <canvas id="dailyPnlChart" height="120"></canvas>
+        </MudPaper>
+
+        <!-- MONTHLY BREAKDOWN CHART -->
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;font-weight:600;">
+                📅 Monthly Performance
+            </MudText>
+            <canvas id="monthlyChart" height="120"></canvas>
+
+            <MudTable Items="_metrics.MonthlyBreakdown" Dense Hover Bordered Class="mt-4" Style="background: transparent;">
+                <HeaderContent>
+                    <MudTh Style="color:#f1f5f9;">Month</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Net P&L</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Trades</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Win Rate</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd Style="color:#e2e8f0;">@context.YearMonth</MudTd>
+                    <MudTd Style="@GetPnLColor(context.NetPnl)">@context.NetPnl.ToString("$0.00")</MudTd>
+                    <MudTd Style="color:#94a3b8;">@context.Trades</MudTd>
+                    <MudTd Style="color:#94a3b8;">@context.WinRate.ToString("0.0")%</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+
+        <!-- SYMBOL BREAKDOWN -->
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;font-weight:600;">
+                🎯 Symbol Performance
+            </MudText>
+
+            <MudTable Items="_metrics.SymbolStats" Dense Hover Bordered Style="background: transparent;">
+                <HeaderContent>
+                    <MudTh Style="color:#f1f5f9;">Symbol</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Net P&L</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Trades</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Win Rate</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Profit Factor</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd Style="color:#e2e8f0; font-weight:600;">@context.Symbol</MudTd>
+                    <MudText Style="@($"color:{GetPnLColor(_metrics.TodayNetPnl)};font-weight:700;")">
+                        @_metrics.TodayNetPnl.ToString("+$0.00;-$0.00;$0.00")
+                    </MudText>
+                    <MudTd Style="color:#94a3b8;">@context.Trades</MudTd>
+                    <MudTd Style="color:#94a3b8;">@context.WinRate.ToString("0.0")%</MudTd>
+                    <MudTd Style="color:#3b82f6;">@context.ProfitFactor.ToString("0.00")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+
+        <!-- HOURLY HEATMAP -->
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;font-weight:600;">
+                🕐 Hourly Performance (UTC)
+            </MudText>
+
+            <MudTable Items="_metrics.HourlyStats" Dense Hover Bordered Style="background: transparent;">
+                <HeaderContent>
+                    <MudTh Style="color:#f1f5f9;">Hour</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Net P&L</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Trades</MudTh>
+                    <MudTh Style="color:#f1f5f9;">Win Rate</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd Style="color:#e2e8f0;">@context.Hour:00 UTC</MudTd>
+                    <MudTd Style="@GetPnLColor(context.NetPnl)">@context.NetPnl.ToString("$0.00")</MudTd>
+                    <MudTd Style="color:#94a3b8;">@context.Trades</MudTd>
+                    <MudTd Style="color:#94a3b8;">@context.WinRate.ToString("0.0")%</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+
+        <!-- EXISTING DETAILED METRICS (Preserved) -->
+        <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;font-weight:600;">
+                📋 Core Metrics
+            </MudText>
+
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="4">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Win Rate</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#22c55e;">
+                            @_metrics.WinRate.ToString("0.00")%
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" md="4">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Profit Factor</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#3b82f6;">
+                            @_metrics.ProfitFactor.ToString("0.00")
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" md="4">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Expectancy</MudText>
+                        <MudText Typo="Typo.h6" Style="@GetPnLColor(_metrics.Expectancy)">
+                            @_metrics.Expectancy.ToString("$0.00")
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" md="4">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Avg Win</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#22c55e;">
+                            $@_metrics.AvgWinUsdt.ToString("0.00")
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" md="4">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Avg Loss</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#ef4444;">
+                            $@_metrics.AvgLossUsdt.ToString("0.00")
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" md="4">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Max Drawdown</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#ef4444;">
+                            $@_metrics.MaxDrawdownUsdt.ToString("0.00")
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private bool _firstRender = true;
+    private PerformanceMetrics? _metrics;
+
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private string _selectedSymbol = "";
+    private List<string> _availableSymbols = new();
+    private string? _pendingToastMessage;
+    private string _pendingToastType = "success";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRender = false;
+        }
+
+        if (!_firstRender && _metrics != null && !_loading)
+        {
+            await RenderAllCharts();
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _metrics = await MetricsService.GetMetricsAsync(
+                CancellationToken.None,
+                _fromDate,
+                _toDate,
+                string.IsNullOrWhiteSpace(_selectedSymbol) ? null : _selectedSymbol);
+
+            _availableSymbols = _metrics.SymbolStats.Select(s => s.Symbol).ToList();
+
+            // await JS.InvokeVoidAsync("showToast", "✅ Metrics refreshed successfully", "success");
+            _pendingToastMessage = "✅ Metrics refreshed successfully";
+            _pendingToastType = "success";
+
+        }
+        catch (Exception ex)
+        {
+            // await JS.InvokeVoidAsync("showToast", $"❌ Failed to load metrics: {ex.Message}", "error");
+            _pendingToastMessage = $"❌ Failed to load metrics: {ex.Message}";
+            _pendingToastType = "error";
+
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RenderAllCharts()
+    {
+        try
+        {
+            if (_metrics?.EquityCurve != null && _metrics.EquityCurve.Any())
+            {
+                var labels = _metrics.EquityCurve.Select(x => x.Date.ToString("MM-dd")).ToArray();
+                var equity = _metrics.EquityCurve.Select(x => x.Cumulative).ToArray();
+                var drawdown = _metrics.EquityCurve.Select(x => x.Drawdown).ToArray();
+                await JS.InvokeVoidAsync("renderEquityChart", labels, equity, drawdown);
+            }
+
+            if (_metrics?.DailyPnlData != null && _metrics.DailyPnlData.Any())
+            {
+                var labels = _metrics.DailyPnlData.Select(x => x.Date.ToString("MM-dd")).ToArray();
+                var pnl = _metrics.DailyPnlData.Select(x => x.NetPnl).ToArray();
+                await JS.InvokeVoidAsync("renderDailyPnlChart", labels, pnl);
+            }
+
+            if (_metrics?.MonthlyBreakdown != null && _metrics.MonthlyBreakdown.Any())
+            {
+                var labels = _metrics.MonthlyBreakdown.Select(x => x.YearMonth).ToArray();
+                var pnl = _metrics.MonthlyBreakdown.Select(x => x.NetPnl).ToArray();
+                await JS.InvokeVoidAsync("renderMonthlyChart", labels, pnl);
+            }
+        }
+        catch (Exception ex)
+        {
+            // await JS.InvokeVoidAsync("console.error", $"Chart render failed: {ex.Message}");
+            _pendingToastMessage = $"Chart render failed:  {ex.Message}";
+            _pendingToastType = "error";
+
+        }
+    }
+
+    private async Task ExportCsvAsync()
+    {
+        try
+        {
+            _loading = true;
+            StateHasChanged();
+
+            var csv = await MetricsService.ExportToCsvAsync(_fromDate, _toDate, _selectedSymbol, CancellationToken.None);
+            var filename = $"trades_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+
+            await JS.InvokeVoidAsync("downloadCsv", filename, csv);
+            // await JS.InvokeVoidAsync("showToast", "✅ CSV exported successfully", "success");
+            _pendingToastMessage = "✅ CSV exported successfully";
+            _pendingToastType = "success";
+
+        }
+        catch (Exception ex)
+        {
+            // await JS.InvokeVoidAsync("showToast", $"❌ Export failed: {ex.Message}", "error");
+            _pendingToastMessage = $"❌ Export failed: {ex.Message}";
+            _pendingToastType = "error";
+
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string GetPnLColor(decimal value)
+    {
+        if (value > 0)
+            return "color:#22c55e; font-weight:700;";
+        if (value < 0)
+            return "color:#ef4444; font-weight:700;";
+        return "color:#94a3b8;";
+    }
+}

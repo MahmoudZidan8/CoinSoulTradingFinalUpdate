@@ -1,0 +1,144 @@
+﻿@page "/trading/logs"
+@rendermode InteractiveServer
+@layout DashboardLayout
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Entities
+@using CoinSoul.Repository.DbContext
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<CoinSoulDbContext> DbFactory
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="py-4">
+
+    <!-- HEADER -->
+    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-4">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h4" Style="color:#f1f5f9; font-weight:700;">
+                📋 Event Logs
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color:#94a3b8;">
+                Lightweight view of recent system events
+            </MudText>
+        </MudStack>
+
+        <MudStack Row Spacing="2">
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Warning" 
+                       Size="Size.Small" 
+                       OnClick="ClearView" 
+                       Disabled="_loading"
+                       StartIcon="@Icons.Material.Filled.Clear">
+                Clear View
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Primary" 
+                       Size="Size.Small" 
+                       OnClick="RefreshAsync" 
+                       Disabled="_loading"
+                       StartIcon="@Icons.Material.Filled.Refresh">
+                Refresh
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <!-- STATS BAR -->
+    <MudPaper Class="pa-3 mb-3" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudText Typo="Typo.body2" Style="color:#94a3b8;">
+            📊 Showing <strong style="color:#3b82f6;">@_items.Count</strong> latest events
+        </MudText>
+    </MudPaper>
+
+    <!-- LOGS TABLE -->
+    <MudPaper Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudTable Items="_items" 
+                  Dense 
+                  Hover 
+                  Bordered 
+                  Striped 
+                  FixedHeader
+                  Height="600px"
+                  Loading="_loading"
+                  Style="background: transparent;">
+            <HeaderContent>
+                <MudTh Style="color:#14314d;">Time (Local)</MudTh>
+                <MudTh Style="color:#14314d;">Level</MudTh>
+                <MudTh Style="color:#14314d;">Type</MudTh>
+                <MudTh Style="color:#14314d;">Symbol</MudTh>
+                <MudTh Style="color:#14314d;">Message</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd Style="color:#94a3b8; font-size:0.75rem;">
+                    @context.AtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                </MudTd>
+                <MudTd>
+                    <MudChip Size="Size.Small" Color="@GetLevelColor(context.Level)">
+                        @context.Level
+                    </MudChip>
+                </MudTd>
+                <MudTd Style="color:#e2e8f0; font-size:0.875rem;">@context.Type</MudTd>
+                <MudTd Style="color:#3b82f6; font-weight:600;">@context.Symbol</MudTd>
+                <MudTd Style="color:#94a3b8; font-size:0.875rem;">@context.Message</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    No events available. Click Refresh to load.
+                </MudAlert>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private List<EventEntity> _items = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync(CancellationToken.None);
+
+            _items = await db.Events
+                .AsNoTracking()
+                .OrderByDescending(e => e.AtUtc)
+                .Take(200)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Load failed: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearView()
+    {
+        _items.Clear();
+        StateHasChanged();
+    }
+
+    private static Color GetLevelColor(string? level)
+    {
+        return level?.ToUpperInvariant() switch
+        {
+            "INFO" => Color.Info,
+            "WARN" => Color.Warning,
+            "ERROR" => Color.Error,
+            _ => Color.Default
+        };
+    }
+}

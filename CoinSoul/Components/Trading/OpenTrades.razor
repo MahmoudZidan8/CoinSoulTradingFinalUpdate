@@ -1,0 +1,566 @@
+﻿@page "/trading/opentrades"
+@rendermode InteractiveServer
+@layout DashboardLayout
+@implements IDisposable
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Trading.Core
+@using CoinSoul.Trading.Engine.Models
+@using CoinSoul.BinanceService.AutoServices.AccountDataService
+@using CoinSoul.Entities
+@using CoinSoul.Repository.DbContext
+@using Microsoft.EntityFrameworkCore
+
+@inject ITradingEngine TradingEngine
+@inject IAutoAccountDataService Account
+@inject IDbContextFactory<CoinSoulDbContext> DbFactory
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="py-4" Style="background-color:black">
+
+    <!-- HEADER -->
+    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-4">
+        <MudText Typo="Typo.h4" Style="color:#f1f5f9; font-weight:700;">
+            📌 Live Trading Monitor
+        </MudText>
+
+        <MudStack Row Spacing="2">
+            <MudChip Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">
+                Auto-refresh: 5s
+            </MudChip>
+
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       Size="Size.Small"
+                       OnClick="ReloadAsync"
+                       Disabled="_loading"
+                       StartIcon="@Icons.Material.Filled.Refresh">
+                Refresh Now
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <!-- CAPITAL OVERVIEW PANEL -->
+    <MudPaper Class="pa-4 mb-4" Style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.12);">
+        <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;">💰 Capital Overview</MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="6" md="2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">Free USDT</MudText>
+                    <MudText Typo="Typo.h6" Style="color:#22c55e;">
+                        $@_capitalData.FreeUsdt.ToString("N2")
+                    </MudText>
+                </MudStack>
+            </MudItem>
+
+            <MudItem xs="6" md="2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">Locked USDT</MudText>
+                    <MudText Typo="Typo.h6" Style="color:#f59e0b;">
+                        $@_capitalData.LockedUsdt.ToString("N2")
+                    </MudText>
+                </MudStack>
+            </MudItem>
+
+            <MudItem xs="6" md="2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">In Positions</MudText>
+                    <MudText Typo="Typo.h6" Style="color:#3b82f6;">
+                        $@_capitalData.UsedInPositions.ToString("N2")
+                    </MudText>
+                </MudStack>
+            </MudItem>
+
+            <MudItem xs="6" md="2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">Available</MudText>
+                    <MudText Typo="Typo.h6" Style="color:#10b981;">
+                        $@_capitalData.AvailableToTrade.ToString("N2")
+                    </MudText>
+                </MudStack>
+            </MudItem>
+
+            <MudItem xs="6" md="2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">Active / Max</MudText>
+                    <MudText Typo="Typo.h6" Style="color:#f1f5f9;">
+                        @_capitalData.ActivePositions / @_capitalData.MaxPositions
+                    </MudText>
+                </MudStack>
+            </MudItem>
+
+            <MudItem xs="6" md="2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.caption" Style="color:#94a3b8;">Net PnL Today</MudText>
+                    <MudText Typo="Typo.h6" Style="@GetPnLStyle(_capitalData.NetPnLToday)">
+                        @_capitalData.NetPnLToday.ToString("+$0.00;-$0.00;$0.00")
+                    </MudText>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- ACTIVE POSITIONS TABLE -->
+    <MudPaper Class="pa-4 mb-4" Style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.12);">
+        <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;">
+            🔥 Active Positions (@_positions.Count)
+        </MudText>
+
+        <MudTable Items="_positions" Dense Hover Bordered Loading="_loading" Striped FixedHeader
+                  Style="background: transparent;">
+            <HeaderContent>
+                <MudTh Style="color:#f1f5f9;">Symbol</MudTh>
+                <MudTh Style="color:#f1f5f9;">Entry</MudTh>
+                <MudTh Style="color:#f1f5f9;">Current</MudTh>
+                <MudTh Style="color:#f1f5f9;">Qty</MudTh>
+                <MudTh Style="color:#f1f5f9;">Gross PnL</MudTh>
+                <MudTh Style="color:#f1f5f9;">Net PnL</MudTh>
+                <MudTh Style="color:#f1f5f9;">PnL %</MudTh>
+                <MudTh Style="color:#f1f5f9;">TP</MudTh>
+                <MudTh Style="color:#f1f5f9;">SL</MudTh>
+                <MudTh Style="color:#f1f5f9;">Lifecycle</MudTh>
+                <MudTh Style="color:#f1f5f9;">Time</MudTh>
+                <MudTh Style="color:#f1f5f9;">Regime</MudTh>
+                <MudTh Style="color:#f1f5f9;">Action</MudTh>
+            </HeaderContent>
+
+            <RowTemplate>
+                <MudTd Style="color:#e2e8f0; font-weight:600;">@context.Symbol</MudTd>
+                <MudTd Style="color:#94a3b8;">@context.EntryPrice.ToString("0.########")</MudTd>
+                <MudTd Style="color:#3b82f6; font-weight:600;">@context.CurrentPrice.ToString("0.########")</MudTd>
+                <MudTd Style="color:#94a3b8;">@context.Quantity.ToString("0.########")</MudTd>
+
+                <MudTd Style="@GetPnLStyle(context.GrossPnL)">
+                    @context.GrossPnL.ToString("+0.00;-0.00;0.00")
+                </MudTd>
+
+                <MudTd Style="@GetPnLStyle(context.NetPnL)">
+                    @context.NetPnL.ToString("+$0.00;-$0.00;$0.00")
+                </MudTd>
+
+                <MudTd Style="@GetPnLStyle(context.NetPnL)">
+                    @context.PnLPct.ToString("+0.00;-0.00;0.00")%
+                </MudTd>
+
+                <MudTd Style="color:#22c55e;">
+                    @(context.TP?.ToString("0.########") ?? "-")
+                </MudTd>
+
+                <MudTd Style="color:#ef4444;">
+                    @(context.SL?.ToString("0.########") ?? "-")
+                </MudTd>
+
+                <MudTd>
+                    <MudChip Size="Size.Small" Color="@GetLifecycleColor(context.LifecycleState)">
+                        @context.LifecycleState
+                    </MudChip>
+                </MudTd>
+
+                <MudTd Style="color:#94a3b8; font-size:0.75rem;">
+                    @FormatTime(context.TimeInTradeSeconds)
+                </MudTd>
+
+                <MudTd>
+                    <MudChip Size="Size.Small" Variant="Variant.Outlined" Style="color:#94a3b8;">
+                        @context.RegimeAtEntry
+                    </MudChip>
+                </MudTd>
+
+                <MudTd>
+                    <MudButton Size="Size.Small"
+                               Color="Color.Error"
+                               Variant="Variant.Outlined"
+                               OnClick="@(() => ClosePositionAsync(context.Symbol))"
+                               Disabled="_loading">
+                        Close
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+
+            <NoRecordsContent>
+                <MudAlert Severity="Severity.Info" Dense="true" Style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <MudText Style="color:#94a3b8;">No active positions. Bot is scanning for opportunities...</MudText>
+                </MudAlert>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+
+    <!-- BINANCE OPEN ORDERS -->
+    <MudPaper Class="pa-4" Style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.12);">
+        <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;">
+            🏦 Binance Open Orders (@_openOrders.Count)
+        </MudText>
+
+        <MudTable Items="_openOrders" Dense Hover Bordered Loading="_loading" Striped Style="background: transparent;">
+            <HeaderContent>
+                <MudTh Style="color:#f1f5f9;">OrderId</MudTh>
+                <MudTh Style="color:#f1f5f9;">Time</MudTh>
+                <MudTh Style="color:#f1f5f9;">Symbol</MudTh>
+                <MudTh Style="color:#f1f5f9;">Side</MudTh>
+                <MudTh Style="color:#f1f5f9;">Type</MudTh>
+                <MudTh Style="color:#f1f5f9;">Price</MudTh>
+                <MudTh Style="color:#f1f5f9;">Qty</MudTh>
+                <MudTh Style="color:#f1f5f9;">Status</MudTh>
+                <MudTh Style="color:#f1f5f9;">Age</MudTh>
+            </HeaderContent>
+
+            <RowTemplate>
+                <MudTd Style="color:#94a3b8; font-family: monospace; font-size:0.75rem;">
+                    @context.OrderId
+                </MudTd>
+
+                <MudTd Style="color:#94a3b8; font-size:0.75rem;">
+                    @context.CreateTime.ToLocalTime().ToString("HH:mm:ss")
+                </MudTd>
+
+                <MudTd Style="color:#e2e8f0; font-weight:600;">@context.Symbol</MudTd>
+
+                <MudTd>
+                    <MudChip Size="Size.Small" Color="@(context.Side == "BUY" ? Color.Success : Color.Error)">
+                        @context.Side
+                    </MudChip>
+                </MudTd>
+
+                <MudTd Style="color:#94a3b8; font-size:0.875rem;">@context.Type</MudTd>
+                <MudTd Style="color:#94a3b8;">@context.Price.ToString("0.########")</MudTd>
+                <MudTd Style="color:#94a3b8;">@context.Quantity.ToString("0.########")</MudTd>
+
+                <MudTd>
+                    <MudChip Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                        @context.Status
+                    </MudChip>
+                </MudTd>
+
+                <MudTd Style="@GetAgeStyle(context.AgeSeconds)">
+                    @FormatTime(context.AgeSeconds)
+                </MudTd>
+            </RowTemplate>
+
+            <NoRecordsContent>
+                <MudAlert Severity="Severity.Info" Dense="true" Style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <MudText Style="color:#94a3b8;">No open orders on Binance.</MudText>
+                </MudAlert>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+
+</MudContainer>
+
+@code {
+    private bool _loading;
+    private bool _jsReady;
+
+    private List<PositionViewModel> _positions = new();
+    private List<OrderRow> _openOrders = new();
+    private CapitalData _capitalData = new();
+
+    private CancellationTokenSource? _cts;
+    private CancellationTokenSource? _refreshCts;
+    private PeriodicTimer? _refreshTimer;
+
+    private readonly SemaphoreSlim _reloadLock = new(1, 1);
+
+    // ✅ لا تعمل Reload/Timer هنا (عشان prerender)
+    protected override Task OnInitializedAsync() => Task.CompletedTask;
+
+    // ✅ أول لحظة JS يكون متاح: هنا
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _jsReady = true;
+
+        await ReloadAsync();          // أول تحميل آمن
+        StartAutoRefresh();           // وبعدها Auto-refresh آمن
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void StartAutoRefresh()
+    {
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+        _refreshCts = new CancellationTokenSource();
+
+        _refreshTimer?.Dispose();
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _refreshTimer.WaitForNextTickAsync(_refreshCts.Token))
+                {
+                    await ReloadAsync();
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                await ToastAsync($"Auto-refresh error: {ex.Message}", "error");
+            }
+        });
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (!_jsReady) return;
+
+        // يمنع تداخل Reloads (زر + Timer)
+        if (!await _reloadLock.WaitAsync(0))
+            return;
+
+        try
+        {
+            _cts?.Cancel();
+            _cts?.Dispose();
+            _cts = new CancellationTokenSource();
+
+            var ct = _cts.Token;
+
+            _loading = true;
+
+            var nowUtc = DateTime.UtcNow;
+
+            await using var db = await DbFactory.CreateDbContextAsync(ct);
+
+            var settings = await db.BotSettings.AsNoTracking().FirstOrDefaultAsync(ct);
+
+            var dbPositions = await db.Positions
+                .AsNoTracking()
+                .Where(p => p.IsActive && p.IsOpen)
+                .ToListAsync(ct);
+
+            var botState = TradingEngine.GetState();
+            var paperPositions = botState.OpenPositions.Where(p => !p.IsClosed).ToList();
+
+            var list = new List<PositionViewModel>(paperPositions.Count + dbPositions.Count);
+
+            foreach (var paper in paperPositions)
+            {
+                var currentPrice = botState.Market.Prices.GetValueOrDefault(paper.Symbol, 0m);
+                if (currentPrice == 0) currentPrice = paper.EntryPrice;
+
+                list.Add(PositionViewModel.FromPaperPosition(paper, currentPrice, nowUtc));
+            }
+
+            foreach (var dbPos in dbPositions)
+            {
+                if (list.Any(p => p.Symbol == dbPos.Symbol))
+                    continue;
+
+                var currentPrice = botState.Market.Prices.GetValueOrDefault(dbPos.Symbol, dbPos.EntryPrice);
+                list.Add(PositionViewModel.FromDbPosition(dbPos, currentPrice, nowUtc));
+            }
+
+            _positions = list;
+
+            var binanceOrders = await Account.GetOpenOrdersAsync(symbol: null);
+
+            _openOrders = binanceOrders
+                .OrderByDescending(o => o.CreateTime)
+                .Select(o => new OrderRow
+                {
+                    OrderId = o.Id,
+                    Symbol = o.Symbol,
+                    Side = o.Side.ToString(),
+                    Type = o.Type.ToString(),
+                    Status = o.Status.ToString(),
+                    Price = o.Price,
+                    Quantity = o.Quantity,
+                    CreateTime = o.CreateTime,
+                    AgeSeconds = (int)(nowUtc - o.CreateTime).TotalSeconds
+                })
+                .ToList();
+
+            var freeUsdt = 0m;
+            var lockedUsdt = 0m;
+
+            try
+            {
+                var balances = await Account.GetBalancesAsync(
+                    asset: null,
+                    needBtcValuation: null,
+                    receiveWindow: null,
+                    ct: ct);
+
+                var usdt = balances.FirstOrDefault(b => b.Asset == "USDT");
+                if (usdt != null)
+                {
+                    freeUsdt = usdt.Available;
+                    lockedUsdt = usdt.Total - usdt.Available;
+                }
+            }
+            catch { /* ignore balance errors */ }
+
+            var usedInPositions = _positions.Sum(p => p.EntryPrice * p.Quantity);
+            var netPnLToday = _positions.Sum(p => p.NetPnL);
+
+            _capitalData = new CapitalData
+            {
+                FreeUsdt = freeUsdt,
+                LockedUsdt = lockedUsdt,
+                UsedInPositions = usedInPositions,
+                AvailableToTrade = freeUsdt,
+                ActivePositions = _positions.Count,
+                MaxPositions = settings?.MaxConcurrentPositions ?? 1,
+                NetPnLToday = netPnLToday
+            };
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            await ToastAsync($"Reload failed: {ex.Message}", "error");
+            await SafeConsoleAsync($"Reload failed: {ex}");
+        }
+        finally
+        {
+            _loading = false;
+            _reloadLock.Release();
+        }
+    }
+
+    private async Task ClosePositionAsync(string symbol)
+    {
+        if (!_jsReady) return;
+
+        try
+        {
+            _loading = true;
+            await InvokeAsync(StateHasChanged);
+
+            await ToastAsync($"Closing {symbol}...", "warning");
+
+            // TODO: هنا هتعمل Close حقيقي من الـ Engine/Executor
+            await Task.Delay(400);
+
+            await ToastAsync($"✅ {symbol} close requested", "success");
+
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await ToastAsync($"Close failed: {ex.Message}", "error");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    // ========= Toast + Safe Console =========
+
+    private async Task ToastAsync(string message, string type = "info")
+    {
+        if (!_jsReady) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("showToast", message, type);
+        }
+        catch
+        {
+            // لا تكسر الصفحة
+        }
+    }
+
+    private async Task SafeConsoleAsync(string message)
+    {
+        if (!_jsReady) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("console.error", message);
+        }
+        catch { }
+    }
+
+    // ========= UI Helpers =========
+
+    private static Color GetLifecycleColor(string state) => state switch
+    {
+        "ENTRY_PENDING" => Color.Warning,
+        "ENTRY_FILLED" => Color.Info,
+        "OCO_PLACING" => Color.Info,
+        "OCO_PLACED" => Color.Primary,
+        "TP_HIT" => Color.Success,
+        "SL_HIT" => Color.Error,
+        "CLOSED" => Color.Default,
+        "FAILED" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string GetPnLStyle(decimal value)
+    {
+        if (value > 0) return "color:#22c55e; font-weight:700;";
+        if (value < 0) return "color:#ef4444; font-weight:700;";
+        return "color:#94a3b8;";
+    }
+
+    private static Color GetStatusColor(string status) => status switch
+    {
+        "NEW" => Color.Info,
+        "FILLED" => Color.Success,
+        "PARTIALLY_FILLED" => Color.Warning,
+        "CANCELED" => Color.Default,
+        "REJECTED" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string GetAgeStyle(int ageSeconds)
+    {
+        if (ageSeconds > 120) return "color:#ef4444; font-weight:600;";
+        if (ageSeconds > 60) return "color:#f59e0b; font-weight:600;";
+        return "color:#94a3b8;";
+    }
+
+    private static string FormatTime(int seconds)
+    {
+        if (seconds >= 3600) return $"{seconds / 3600}h {(seconds % 3600) / 60}m";
+        if (seconds >= 60) return $"{seconds / 60}m {seconds % 60}s";
+        return $"{seconds}s";
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            _cts?.Cancel();
+            _cts?.Dispose();
+
+            _refreshCts?.Cancel();
+            _refreshCts?.Dispose();
+
+            _refreshTimer?.Dispose();
+
+            _reloadLock?.Dispose();
+        }
+        catch { }
+    }
+
+    private sealed class CapitalData
+    {
+        public decimal FreeUsdt { get; set; }
+        public decimal LockedUsdt { get; set; }
+        public decimal UsedInPositions { get; set; }
+        public decimal AvailableToTrade { get; set; }
+        public int ActivePositions { get; set; }
+        public int MaxPositions { get; set; }
+        public decimal NetPnLToday { get; set; }
+    }
+
+    private sealed class OrderRow
+    {
+        public long OrderId { get; set; }
+        public string Symbol { get; set; } = "";
+        public string Side { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Status { get; set; } = "";
+        public decimal Price { get; set; }
+        public decimal Quantity { get; set; }
+        public DateTime CreateTime { get; set; }
+        public int AgeSeconds { get; set; }
+    }
+}

@@ -1,0 +1,382 @@
+﻿@page "/trading/account"
+@rendermode InteractiveServer
+@layout DashboardLayout
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Trading.Core
+@using CoinSoul.Trading.Engine
+@using CoinSoul.Entities
+@using CoinSoul.Repository.DbContext
+@using Microsoft.EntityFrameworkCore
+@inject PortfolioStateService PortfolioState
+@inject IDbContextFactory<CoinSoulDbContext> DbFactory
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="py-4" Style="background-color:black">
+
+    <!-- HEADER -->
+    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-4">
+        <MudText Typo="Typo.h4" Style="color:#f1f5f9; font-weight:700;">
+            💼 Portfolio Intelligence Center
+        </MudText>
+        <MudButton Variant="Variant.Outlined" 
+                   Color="Color.Primary" 
+                   Size="Size.Small" 
+                   OnClick="RefreshAsync" 
+                   Disabled="_loading"
+                   StartIcon="@Icons.Material.Filled.Refresh">
+            Refresh
+        </MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_state != null)
+    {
+        <!-- SECTION A: Capital Overview -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Total Equity</MudText>
+                        <MudText Typo="Typo.h5" Style="color:#3b82f6; font-weight:700;">
+                            $@_state.Portfolio.TotalEquityUsdt.ToString("N2")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            SOD: $@_state.Portfolio.StartOfDayEquityUsdt.ToString("N2")
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Daily Change</MudText>
+                        <MudText Typo="Typo.h5" Style="@GetChangeColor(_dailyChangeUsdt)">
+                            @_dailyChangeUsdt.ToString("+$0.00;-$0.00;$0.00")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="@GetChangeColor(_dailyChangePct)">
+                            @_dailyChangePct.ToString("+0.00;-0.00;0.00")%
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Free / Locked</MudText>
+                        <MudText Typo="Typo.h6" Style="color:#22c55e; font-weight:700;">
+                            $@_state.Portfolio.FreeUsdt.ToString("N2")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color:#f59e0b;">
+                            Locked: $@_state.Portfolio.LockedUsdt.ToString("N2")
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- SECTION B: Risk Status Panel -->
+        <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9; font-weight:600;">
+                🛡️ Risk Status
+            </MudText>
+
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="3">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Status</MudText>
+                        <MudChip Color="@GetRiskColor(_state.Risk.StatusColor)" Size="Size.Small">
+                            @_state.Risk.Status
+                        </MudChip>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" md="3">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">Drawdown</MudText>
+                        <MudText Typo="Typo.h6" Style="@GetDrawdownColor(_state.Risk.DrawdownPct)">
+                            @_state.Risk.DrawdownPct.ToString("0.00")%
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+
+                @if (_state.Risk.PauseUntilUtc.HasValue)
+                {
+                    <MudItem xs="12" md="3">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Style="color:#94a3b8;">Paused Until</MudText>
+                            <MudText Typo="Typo.body2" Style="color:#f59e0b;">
+                                @_state.Risk.PauseUntilUtc.Value.ToLocalTime().ToString("HH:mm:ss")
+                            </MudText>
+                        </MudStack>
+                    </MudItem>
+                }
+
+                @if (_state.Risk.StopUntilUtc.HasValue)
+                {
+                    <MudItem xs="12" md="3">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Style="color:#94a3b8;">Stopped Until</MudText>
+                            <MudText Typo="Typo.body2" Style="color:#ef4444;">
+                                @_state.Risk.StopUntilUtc.Value.ToLocalTime().ToString("HH:mm:ss")
+                            </MudText>
+                        </MudStack>
+                    </MudItem>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(_state.Risk.Message))
+                {
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Warning" Dense="true" Style="background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3);">
+                            <MudText Style="color:#f59e0b;">@_state.Risk.Message</MudText>
+                        </MudAlert>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudPaper>
+
+        <!-- SECTION C & D: Holdings Table & Pie Chart -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" md="8">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9; font-weight:600;">
+                        📊 Holdings Breakdown
+                    </MudText>
+
+                    <MudTable Items="_sortedHoldings" Dense Hover Bordered Style="background: transparent;">
+                        <HeaderContent>
+                            <MudTh Style="color:#f1f5f9;">Asset</MudTh>
+                            <MudTh Style="color:#f1f5f9;">Free</MudTh>
+                            <MudTh Style="color:#f1f5f9;">Locked</MudTh>
+                            <MudTh Style="color:#f1f5f9;">Total</MudTh>
+                            <MudTh Style="color:#f1f5f9;">USDT Value</MudTh>
+                            <MudTh Style="color:#f1f5f9;">Allocation %</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd Style="color:#e2e8f0; font-weight:600;">@context.Asset</MudTd>
+                            <MudTd Style="color:#94a3b8;">@context.Free.ToString("0.########")</MudTd>
+                            <MudTd Style="color:#f59e0b;">@context.Locked.ToString("0.########")</MudTd>
+                            <MudTd Style="color:#94a3b8;">@context.Total.ToString("0.########")</MudTd>
+                            <MudTd Style="color:#3b82f6; font-weight:600;">$@context.UsdtValue.ToString("N2")</MudTd>
+                            <MudTd Style="@GetAllocationStyle(context.AllocationPct)">
+                                @context.AllocationPct.ToString("0.00")%
+                                @if (context.AllocationPct > 25m)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Style="color:#f59e0b;" />
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <MudAlert Severity="Severity.Info" Dense="true">
+                                No holdings data available.
+                            </MudAlert>
+                        </NoRecordsContent>
+                    </MudTable>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9; font-weight:600;">
+                        🥧 Allocation Chart
+                    </MudText>
+                    <canvas id="allocationChart" height="250"></canvas>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- SECTION E: Equity Trend -->
+        <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+            <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9; font-weight:600;">
+                📈 Recent Equity Trend (24h)
+            </MudText>
+            <canvas id="equityTrendChart" height="100"></canvas>
+        </MudPaper>
+    }
+
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private bool _firstRender = true;
+    private DashboardPortfolioStateDto? _state;
+    private List<HoldingRow> _sortedHoldings = new();
+    private List<EquitySnapshotEntity> _snapshots = new();
+    private decimal _dailyChangeUsdt;
+    private decimal _dailyChangePct;
+
+    private string? _pendingToast;
+    private string? _pendingToastType;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRender = false;
+        }
+
+        if (!_firstRender && _pendingToast != null)
+        {
+            await JS.InvokeVoidAsync("showToast", _pendingToast, _pendingToastType ?? "info");
+            _pendingToast = null;
+            _pendingToastType = null;
+        }
+
+        if (!_firstRender && _state != null && !_loading)
+        {
+            await RenderChartsAsync();
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _state = await PortfolioState.GetDashboardStateAsync(CancellationToken.None);
+
+            _dailyChangeUsdt = _state.Portfolio.TotalEquityUsdt - _state.Portfolio.StartOfDayEquityUsdt;
+            _dailyChangePct = _state.Portfolio.StartOfDayEquityUsdt > 0
+                ? (_dailyChangeUsdt / _state.Portfolio.StartOfDayEquityUsdt) * 100m
+                : 0;
+
+            _sortedHoldings = _state.Portfolio.Holdings
+                .Select(h => new HoldingRow
+                {
+                    Asset = h.Asset,
+                    Free = h.Free,
+                    Locked = h.Locked,
+                    Total = h.Total,
+                    UsdtValue = h.UsdtValue,
+                    AllocationPct = _state.Portfolio.TotalEquityUsdt > 0
+                        ? (h.UsdtValue / _state.Portfolio.TotalEquityUsdt) * 100m
+                        : 0
+                })
+                .OrderByDescending(h => h.UsdtValue)
+                .ToList();
+
+            await using var db = await DbFactory.CreateDbContextAsync(CancellationToken.None);
+            var now = DateTime.UtcNow;
+            var yesterday = now.AddDays(-1);
+
+            _snapshots = await db.EquitySnapshotEntity
+                .AsNoTracking()
+                .Where(s => s.AtUtc >= yesterday)
+                .OrderBy(s => s.AtUtc)
+                .ToListAsync();
+
+            _pendingToast = "✅ Portfolio data refreshed";
+            _pendingToastType = "success";
+        }
+        catch (Exception ex)
+        {
+            _pendingToast = $"❌ Refresh failed: {ex.Message}";
+            _pendingToastType = "error";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RenderChartsAsync()
+    {
+        try
+        {
+            // Allocation Pie Chart
+            var top5Holdings = _sortedHoldings.Take(5).ToList();
+            var othersValue = _sortedHoldings.Skip(5).Sum(h => h.UsdtValue);
+
+            var labels = top5Holdings.Select(h => h.Asset).ToList();
+            var values = top5Holdings.Select(h => h.UsdtValue).ToList();
+
+            if (othersValue > 0)
+            {
+                labels.Add("Others");
+                values.Add(othersValue);
+            }
+
+            await JS.InvokeVoidAsync("renderAllocationChart", labels.ToArray(), values.ToArray());
+
+            // Equity Trend
+            if (_snapshots.Any())
+            {
+                var trendLabels = _snapshots.Select(s => s.AtUtc.ToLocalTime().ToString("HH:mm")).ToArray();
+                var trendValues = _snapshots.Select(s => s.TotalEquityUsdt).ToArray();
+                await JS.InvokeVoidAsync("renderEquityTrendChart", trendLabels, trendValues);
+            }
+            else
+            {
+                // Fallback: single point
+                var singleLabel = new[] { "Now" };
+                var singleValue = new[] { _state!.Portfolio.TotalEquityUsdt };
+                await JS.InvokeVoidAsync("renderEquityTrendChart", singleLabel, singleValue);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Chart render failed: {ex.Message}");
+        }
+    }
+
+    private static string GetChangeColor(decimal value)
+    {
+        if (value > 0)
+            return "color:#22c55e; font-weight:700;";
+        if (value < 0)
+            return "color:#ef4444; font-weight:700;";
+        return "color:#94a3b8;";
+    }
+
+    private static Color GetRiskColor(string statusColor)
+    {
+        return statusColor.ToLowerInvariant() switch
+        {
+            "green" => Color.Success,
+            "yellow" => Color.Warning,
+            "orange" => Color.Warning,
+            "red" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private static string GetDrawdownColor(decimal drawdownPct)
+    {
+        if (drawdownPct > 10m)
+            return "color:#ef4444; font-weight:700;";
+        if (drawdownPct > 5m)
+            return "color:#f59e0b; font-weight:700;";
+        return "color:#22c55e; font-weight:700;";
+    }
+
+    private static string GetAllocationStyle(decimal allocationPct)
+    {
+        if (allocationPct > 25m)
+            return "color:#f59e0b; font-weight:700;";
+        return "color:#94a3b8;";
+    }
+
+    private sealed class HoldingRow
+    {
+        public string Asset { get; set; } = "";
+        public decimal Free { get; set; }
+        public decimal Locked { get; set; }
+        public decimal Total { get; set; }
+        public decimal UsdtValue { get; set; }
+        public decimal AllocationPct { get; set; }
+    }
+}
+

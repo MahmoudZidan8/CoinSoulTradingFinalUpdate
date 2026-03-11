@@ -1,0 +1,353 @@
+﻿@page "/trading/events"
+@rendermode InteractiveServer
+@layout DashboardLayout
+@implements IDisposable
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Entities
+@using CoinSoul.Repository.DbContext
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<CoinSoulDbContext> DbFactory
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="py-4">
+
+    <!-- HEADER -->
+    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-4">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h4" Style="color:#f1f5f9; font-weight:700;">
+                🧾 Event Monitor
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color:#94a3b8;">
+                Real-time system events, trades, and diagnostics
+            </MudText>
+        </MudStack>
+
+        <MudStack Row Spacing="2" AlignItems="AlignItems.Center">
+            <MudSwitch @bind-Checked="_autoRefresh" 
+                       Color="Color.Success" 
+                       Label="Auto Refresh (5s)"
+                       Style="color:#e2e8f0;" />
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Primary" 
+                       Size="Size.Small" 
+                       OnClick="LoadDataAsync" 
+                       Disabled="_loading"
+                       StartIcon="@Icons.Material.Filled.Refresh">
+                Refresh Now
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <!-- FILTERS PANEL -->
+    <MudPaper Class="pa-4 mb-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudText Typo="Typo.h6" Class="mb-3" Style="color:#f1f5f9;">
+            🔍 Filters
+        </MudText>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="3">
+                <MudDatePicker Label="From Date" 
+                               @bind-Date="_filterFromDate"
+                               Editable="true"
+                               PickerVariant="PickerVariant.Dialog"
+                               Variant="Variant.Outlined"
+                               MaxDate="DateTime.Today"
+                               Style="color:#e2e8f0;" />
+              
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudDatePicker Label="To Date" 
+                               @bind-Date="_filterToDate" 
+                               Editable="true"
+                               PickerVariant="PickerVariant.Dialog"
+                               Variant="Variant.Outlined"
+                               MaxDate="DateTime.Today"
+                               Style="color:#e2e8f0;" />
+
+            </MudItem>
+
+            <MudItem xs="12" md="2">
+                <MudSelect T="string" Label="Level" @bind-Value="_filterLevel" Variant="Variant.Outlined" Style="color:#e2e8f0;">
+                    <MudSelectItem T="string" Value="@("")">ALL</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("INFO")">INFO</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("WARN")">WARN</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("ERROR")">ERROR</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" md="2">
+                <MudTextField T="string" Label="Type" @bind-Value="_filterType" Variant="Variant.Outlined" Clearable Style="color:#e2e8f0;" />
+            </MudItem>
+
+            <MudItem xs="12" md="2">
+                <MudTextField T="string" Label="Symbol" @bind-Value="_filterSymbol" Variant="Variant.Outlined" Clearable Style="color:#e2e8f0;" />
+            </MudItem>
+
+            <MudItem xs="12" md="8">
+                <MudTextField T="string" Label="Search Message" @bind-Value="_filterMessage" Variant="Variant.Outlined" Clearable Style="color:#e2e8f0;" />
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudStack Row Spacing="2">
+                    <MudButton Color="Color.Primary" OnClick="ApplyFiltersAsync" Disabled="_loading" StartIcon="@Icons.Material.Filled.FilterAlt">
+                        Apply
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="ResetFiltersAsync" Disabled="_loading" StartIcon="@Icons.Material.Filled.FilterAltOff">
+                        Reset
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- STATS BAR -->
+    <MudPaper Class="pa-3 mb-3" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudStack Row Spacing="4" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.body2" Style="color:#94a3b8;">
+                Showing <strong style="color:#3b82f6;">@_items.Count</strong> events
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color:#94a3b8;">
+                Page <strong style="color:#3b82f6;">@(_currentPage + 1)</strong> of <strong>@_totalPages</strong>
+            </MudText>
+            <MudSelect T="int" @bind-Value="_pageSize" Variant="Variant.Outlined" Dense Style="width:120px;">
+                <MudSelectItem T="int" Value="100">100 rows</MudSelectItem>
+                <MudSelectItem T="int" Value="200">200 rows</MudSelectItem>
+                <MudSelectItem T="int" Value="500">500 rows</MudSelectItem>
+            </MudSelect>
+        </MudStack>
+    </MudPaper>
+
+    <!-- EVENTS TABLE -->
+    <MudPaper Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudTable Items="_items" 
+                  Dense 
+                  Hover 
+                  Bordered 
+                  Striped 
+                  FixedHeader
+                  Height="600px"
+                  Loading="_loading"
+                  Style="background: transparent;">
+            <HeaderContent>
+                <MudTh Style="color:#14314d;;">Time (Local)</MudTh>
+                <MudTh Style="color:#14314d;;">Level</MudTh>
+                <MudTh Style="color:#14314d;;">Type</MudTh>
+                <MudTh Style="color:#14314d;;">Symbol</MudTh>
+                <MudTh Style="color:#14314d;;">Message</MudTh>
+                <MudTh Style="color:#14314d;;">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd Style="color:#94a3b8; font-size:0.75rem;">
+                    @context.AtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                </MudTd>
+                <MudTd>
+                    <MudChip Size="Size.Small" Color="@GetLevelColor(context.Level)">
+                        @context.Level
+                    </MudChip>
+                </MudTd>
+                <MudTd Style="color:#e2e8f0; font-size:0.875rem;">@context.Type</MudTd>
+                <MudTd Style="color:#3b82f6; font-weight:600;">@context.Symbol</MudTd>
+                <MudTd Style="color:#94a3b8; font-size:0.875rem;">@context.Message</MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" 
+                                   Size="Size.Small" 
+                                   Color="Color.Default"
+                                   OnClick="@(() => CopyMessageAsync(context.Message))" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    No events found matching the filters.
+                </MudAlert>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+
+    <!-- PAGINATION -->
+    <MudPaper Class="pa-3 mt-3" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudStack Row JustifyContent="JustifyContent.Center" Spacing="2">
+            <MudButton Variant="Variant.Outlined" 
+                       Size="Size.Small" 
+                       OnClick="PreviousPageAsync" 
+                       Disabled="_currentPage == 0 || _loading"
+                       StartIcon="@Icons.Material.Filled.ChevronLeft">
+                Previous
+            </MudButton>
+            <MudText Typo="Typo.body2" Style="color:#e2e8f0; line-height:36px;">
+                Page @(_currentPage + 1) of @_totalPages
+            </MudText>
+            <MudButton Variant="Variant.Outlined" 
+                       Size="Size.Small" 
+                       OnClick="NextPageAsync" 
+                       Disabled="_currentPage >= _totalPages - 1 || _loading"
+                       EndIcon="@Icons.Material.Filled.ChevronRight">
+                Next
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private bool _autoRefresh;
+    private List<EventEntity> _items = new();
+
+    private DateTime? _filterFromDate = DateTime.Today.AddDays(-7);
+    private DateTime? _filterToDate = DateTime.Today.AddDays(1);
+    private string _filterLevel = "";
+    private string _filterType = "";
+    private string _filterSymbol = "";
+    private string _filterMessage = "";
+
+    private int _currentPage = 0;
+    private int _pageSize = 200;
+    private int _totalPages = 1;
+
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+        StartAutoRefresh();
+    }
+
+    private void StartAutoRefresh()
+    {
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        _ = Task.Run(async () =>
+        {
+            while (await _refreshTimer.WaitForNextTickAsync())
+            {
+                if (_autoRefresh && !_loading)
+                {
+                    await LoadDataAsync();
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        });
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync(ct);
+
+            var query = db.Events.AsNoTracking();
+
+            if (_filterFromDate.HasValue)
+                query = query.Where(e => e.AtUtc >= _filterFromDate.Value.ToUniversalTime());
+
+            if (_filterToDate.HasValue)
+                query = query.Where(e => e.AtUtc <= _filterToDate.Value.ToUniversalTime());
+
+            if (!string.IsNullOrWhiteSpace(_filterLevel))
+                query = query.Where(e => e.Level == _filterLevel);
+
+            if (!string.IsNullOrWhiteSpace(_filterType))
+                query = query.Where(e => e.Type.Contains(_filterType));
+
+            if (!string.IsNullOrWhiteSpace(_filterSymbol))
+                query = query.Where(e => e.Symbol != null && e.Symbol.Contains(_filterSymbol));
+
+            if (!string.IsNullOrWhiteSpace(_filterMessage))
+                query = query.Where(e => e.Message != null && e.Message.Contains(_filterMessage));
+
+            var totalCount = await query.CountAsync(ct);
+            _totalPages = (int)Math.Ceiling(totalCount / (double)_pageSize);
+
+            _items = await query
+                .OrderByDescending(e => e.AtUtc)
+                .Skip(_currentPage * _pageSize)
+                .Take(_pageSize)
+                .ToListAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Load failed: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        _currentPage = 0;
+        await LoadDataAsync();
+    }
+
+    private async Task ResetFiltersAsync()
+    {
+        _filterFromDate = DateTime.Today.AddDays(-7);
+        _filterToDate = DateTime.Today.AddDays(1);
+        _filterLevel = "";
+        _filterType = "";
+        _filterSymbol = "";
+        _filterMessage = "";
+        _currentPage = 0;
+        await LoadDataAsync();
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_currentPage > 0)
+        {
+            _currentPage--;
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_currentPage < _totalPages - 1)
+        {
+            _currentPage++;
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task CopyMessageAsync(string? message)
+    {
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", message);
+            await JS.InvokeVoidAsync("showToast", "📋 Message copied to clipboard", "info");
+        }
+    }
+
+    private static Color GetLevelColor(string? level)
+    {
+        return level?.ToUpperInvariant() switch
+        {
+            "INFO" => Color.Info,
+            "WARN" => Color.Warning,
+            "ERROR" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _refreshTimer?.Dispose();
+    }
+}

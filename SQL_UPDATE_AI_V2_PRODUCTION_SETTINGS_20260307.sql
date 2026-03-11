@@ -1,0 +1,58 @@
+-- CoinSoul AI v2 Production (Spot Scalping)
+-- Review before running in production.
+UPDATE TOP (1) dbo.BotSettings
+SET
+    StrategyModeValue = 4,
+    AutoScalperEnabled = 1,
+    TradingEnabled = 1,
+    ExecuteTrades = 1,
+    KillSwitch = 0,
+    TradeMode = 'Spot',
+    TargetUsdPerTrade = 18,
+    MinUsdPerTrade = 18,
+    TradeSizeUsd = 18,
+    CapitalPerTradeUsdt = 18,
+    MaxOpenTrades = CASE WHEN MaxOpenTrades <= 0 THEN 10 ELSE MaxOpenTrades END,
+    MaxConcurrentPositions = CASE WHEN MaxConcurrentPositions <= 0 THEN 10 ELSE MaxConcurrentPositions END,
+    PreventSameSymbolTwice = 1,
+    UniqueSymbolOnly = 1,
+    BlockSameSymbolReentry = 1,
+    TradeHistoryTopSymbols = 30,
+    MinUsdtToOpenNewPosition = 18,
+    MinFreeUsdtReserve = 0,
+    -- OCO + Binance-fee aware exits
+    UseOcoExit = 1,
+    PlaceSeparateTpSlIfOcoFails = 1,
+    OcoRetryAttempts = 3,
+    IncludeFeesInTP = 1,
+    MakerFeeRate = 0.001,
+    TakerFeeRate = 0.001,
+    NetProfitTargetUsd = 0.18,
+    TakeProfitGrossPct = 1.00,
+    StopLossGrossPct = 2.00,
+    SlippageBufferPct = 0.05,
+    SpreadBufferPct = 0.05,
+    OcoStopLimitBufferPct = 0.12,
+    -- Entry behaviour
+    UseLimitMakerEntry = 1,
+    LimitMakerDiscountBps = 4,
+    LimitMakerTimeoutSeconds = 20,
+    FallbackToMarketOnEntryTimeout = 1,
+    MaxAllowedEntrySlippagePct = 0.20,
+    -- AI scanner defaults for scalping
+    TradeHistoryTopSymbols = 30,
+    MinVolume24hUsd = 500000,
+    MaxSpreadPct = 0.20,
+    RsiMaxForEntry = 78,
+    MomentumMinPct = 0.03,
+    RejectShortTermPeak = 1,
+    EnableMarketRegimeFilter = 1,
+    -- Cooldowns / safety
+    SmartCooldownMinutes = 10,
+    CooldownSameSymbolSeconds = 600,
+    CooldownAfterLossSeconds = 600,
+    EntryCooldownSeconds = 30,
+    BalanceRefreshCooldownMs = 2000,
+    DustIgnoreUsdThreshold = 1.00,
+    IsEnabled = 1
+ORDER BY Id DESC;

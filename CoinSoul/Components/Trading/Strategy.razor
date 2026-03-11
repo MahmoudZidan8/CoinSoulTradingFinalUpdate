@@ -1,0 +1,79 @@
+﻿@page "/trading/strategy"
+@rendermode InteractiveServer
+@layout DashboardLayout
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Trading.Core
+@inject ITradingEngine TradingEngine
+@inject IBestSymbolsService BestSymbols
+@inject IJSRuntime JS
+
+<MudPaper Class="pa-4" Style="background-color:black">
+
+    <MudText Typo="Typo.h6">🎯 Strategy A</MudText>
+
+    <!-- MODE -->
+    <MudRadioGroup T="StrategyAMode"
+                   @bind-SelectedOption="_mode"
+                   Row="true">
+        <MudRadio Option="StrategyAMode.Conservative">Conservative</MudRadio>
+        <MudRadio Option="StrategyAMode.Balanced">Balanced</MudRadio>
+        <MudRadio Option="StrategyAMode.Aggressive">Aggressive</MudRadio>
+        <MudRadio Option="StrategyAMode.Scalping">Scalping</MudRadio>
+    </MudRadioGroup>
+
+    <MudDivider Class="my-3" />
+
+    <MudButton Color="Color.Info" OnClick="LoadBestSymbols">
+        ⭐ Load Best Symbols
+    </MudButton>
+
+    <MudTable Items="_symbols" Dense Hover Class="mt-3">
+        <HeaderContent>
+            <MudTh>Enabled</MudTh>
+            <MudTh>Symbol</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                <MudSwitch @bind-Checked="context.Enabled" />
+            </MudTd>
+            <MudTd>@context.Symbol</MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    <MudDivider Class="my-3" />
+
+    <MudButton Color="Color.Success" OnClick="Save">
+        💾 Save
+    </MudButton>
+
+</MudPaper>
+
+@code {
+    private StrategyAMode _mode = StrategyAMode.Balanced;
+    private List<ManualSymbolConfig> _symbols = new();
+
+    private async Task LoadBestSymbols()
+    {
+        var best = await BestSymbols.GetBestSymbolsAsync(
+            _mode,
+            5,
+            CancellationToken.None);
+
+        _symbols = best.Select(s => new ManualSymbolConfig
+        {
+            Symbol = s,
+            Enabled = true
+        }).ToList();
+
+        await JS.InvokeVoidAsync("alert", $"Loaded {best.Count} symbols for {_mode}");
+    }
+
+    private async Task Save()
+    {
+        await TradingEngine.EnqueueAsync(
+            new UpdateManualStrategyCommand(_symbols));
+
+        await JS.InvokeVoidAsync("alert", "Strategy saved");
+    }
+}

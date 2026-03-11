@@ -1,0 +1,439 @@
+﻿@page "/trading/settings"
+@rendermode InteractiveServer
+@layout DashboardLayout
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Trading.Core
+@inject ITradingEngine TradingEngine
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="py-4">
+
+    <!-- HEADER -->
+    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-4">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h4" Style="color:#f1f5f9; font-weight:700;">
+                ⚡ Runtime Quick Settings
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color:#94a3b8;">
+                Live runtime configuration • Changes apply immediately without restart • No database persistence
+            </MudText>
+        </MudStack>
+
+        <MudStack Row Spacing="2" AlignItems="AlignItems.Center">
+            @if (HasChanges)
+            {
+                <MudChip Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Edit">
+                    Unsaved Changes
+                </MudChip>
+            }
+            else
+            {
+                <MudChip Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">
+                    Synced
+                </MudChip>
+            }
+        </MudStack>
+    </MudStack>
+
+    <!-- ACTION BAR TOP -->
+    <MudPaper Class="pa-3 mb-3" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudStack Row Spacing="2" JustifyContent="JustifyContent.End">
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Info" 
+                       Size="Size.Small" 
+                       OnClick="ReloadRuntimeAsync" 
+                       Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.CloudDownload">
+                Reload Runtime
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Warning" 
+                       Size="Size.Small" 
+                       OnClick="ResetDefaults" 
+                       Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.RestartAlt">
+                Reset Defaults
+            </MudButton>
+            <MudButton Color="Color.Success" 
+                       Size="Size.Small" 
+                       OnClick="ApplyAsync" 
+                       Disabled="_busy || !HasChanges"
+                       StartIcon="@Icons.Material.Filled.Save">
+                Apply Changes
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    <!-- TABS -->
+    <MudPaper Class="pa-4" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudTabs Elevation="0" Rounded ApplyEffectsToContainer Color="Color.Primary" PanelClass="pa-4">
+
+            <!-- TAB 1: GENERAL -->
+            <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Dense="true" 
+                                  Style="background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.3);">
+                            <MudText Style="color:#3b82f6;">
+                                <strong>💡 Recommended Defaults:</strong> MaxUsdPerTrade=18 • TopSymbols=100 • LimitMaker=20s
+                            </MudText>
+                        </MudAlert>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudSwitch @bind-Checked="_settings.PaperTrading" 
+                                   Color="Color.Warning" 
+                                   Label="Paper Trading Mode"
+                                   Style="color:#e2e8f0;" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            🎮 Simulated trades (no real money)
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="decimal" 
+                                         Label="Max USD Per Trade" 
+                                         @bind-Value="_settings.MaxUsdPerTrade"
+                                         Variant="Variant.Outlined"
+                                         Min="5m"
+                                         Immediate="true"
+                                         Style="color:#e2e8f0;" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            💰 Maximum capital per single trade
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="int" 
+                                         Label="Top Symbols Count" 
+                                         @bind-Value="_settings.TopSymbolsCount"
+                                         Variant="Variant.Outlined"
+                                         Min="50"
+                                         Step="50"
+                                         Immediate="true"
+                                         Style="color:#e2e8f0;" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            📊 Number of top liquid symbols to scan (by USDT volume)
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="int" 
+                                         Label="Limit Maker Timeout (seconds)" 
+                                         @bind-Value="_settings.LimitMakerSeconds"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="30"
+                                         Step="1"
+                                         Immediate="true"
+                                         Style="color:#e2e8f0;" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            ⏱️ Wait time for limit order fill before using market order
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+            <!-- TAB 2: TARGETS & SAFETY -->
+            <MudTabPanel Text="Targets & Safety" Icon="@Icons.Material.Filled.Security">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Warning" Dense="true" 
+                                  Style="background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3);">
+                            <MudText Style="color:#f59e0b;">
+                                <strong>⚠️ Recommended Defaults:</strong> NetProfitTarget=0.10 USDT • TimeExit=240s • StopLoss=0.8%
+                            </MudText>
+                        </MudAlert>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal" 
+                                         Label="Net Profit Target (USDT)" 
+                                         @bind-Value="_settings.NetProfitTargetUsdt"
+                                         Variant="Variant.Outlined"
+                                         Min="0.01m"
+                                         Step="0.01m"
+                                         Immediate="true"
+                                         Style="color:#e2e8f0;" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            🎯 Minimum net profit after fees (per trade)
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="int" 
+                                         Label="Time Exit (seconds)" 
+                                         @bind-Value="_settings.TimeExitSeconds"
+                                         Variant="Variant.Outlined"
+                                         Min="30"
+                                         Max="3600"
+                                         Step="10"
+                                         Immediate="true"
+                                         Style="color:#e2e8f0;" />
+                        <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                            ⏰ Maximum time in trade before forced exit
+                        </MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField T="decimal" 
+                                         Label="Hard Stop Loss (%)" 
+                                         @bind-Value="_settings.HardStopLossPct"
+                                         Variant="Variant.Outlined"
+                                         Min="0.1m"
+                                         Max="5m"
+                                         Step="0.1m"
+                                         Immediate="true"
+                                         Style="color:#e2e8f0;" />
+                        <MudText Typo="Typo.caption" Style="color:#ef4444;">
+                            🛑 Emergency stop loss percentage (relative to entry)
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+        </MudTabs>
+    </MudPaper>
+
+    <!-- ACTION BAR BOTTOM -->
+    <MudPaper Class="pa-3 mt-3" Style="background: rgba(15,23,42,.6); border:1px solid rgba(148,163,184,.12);">
+        <MudStack Row Spacing="2" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.caption" Style="color:#94a3b8;">
+                    ℹ️ These settings are runtime-only. For persistent DB settings, use <strong>/trading/strategy-auto</strong>
+                </MudText>
+                @if (HasChanges)
+                {
+                    <MudText Typo="Typo.caption" Style="color:#f59e0b;">
+                        ⚠️ You have unsaved changes. Click "Apply Changes" to commit them to runtime.
+                    </MudText>
+                }
+            </MudStack>
+            <MudStack Row Spacing="2">
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Info" 
+                           Size="Size.Small" 
+                           OnClick="ReloadRuntimeAsync" 
+                           Disabled="_busy"
+                           StartIcon="@Icons.Material.Filled.CloudDownload">
+                    Reload Runtime
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Warning" 
+                           Size="Size.Small" 
+                           OnClick="ResetDefaults" 
+                           Disabled="_busy"
+                           StartIcon="@Icons.Material.Filled.RestartAlt">
+                    Reset Defaults
+                </MudButton>
+                <MudButton Color="Color.Success" 
+                           Size="Size.Small" 
+                           OnClick="ApplyAsync" 
+                           Disabled="_busy || !HasChanges"
+                           StartIcon="@Icons.Material.Filled.Save">
+                    Apply Changes
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+</MudContainer>
+
+@code {
+    private bool _busy;
+    private bool _firstRender = true;
+    private UiSettings _settings = new();
+    private UiSettings _original = new();
+
+    private string? _pendingToastMessage;
+    private string? _pendingToastType;
+
+    private bool HasChanges =>
+        _settings.PaperTrading != _original.PaperTrading ||
+        _settings.MaxUsdPerTrade != _original.MaxUsdPerTrade ||
+        _settings.NetProfitTargetUsdt != _original.NetProfitTargetUsdt ||
+        _settings.TimeExitSeconds != _original.TimeExitSeconds ||
+        _settings.HardStopLossPct != _original.HardStopLossPct ||
+        _settings.TopSymbolsCount != _original.TopSymbolsCount ||
+        _settings.LimitMakerSeconds != _original.LimitMakerSeconds;
+
+    protected override void OnInitialized()
+    {
+        LoadFromRuntime();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRender = false;
+        }
+
+        if (!_firstRender && _pendingToastMessage != null)
+        {
+            await JS.InvokeVoidAsync("showToast", _pendingToastMessage, _pendingToastType ?? "info");
+            _pendingToastMessage = null;
+            _pendingToastType = null;
+        }
+    }
+
+    private void LoadFromRuntime()
+    {
+        var s = TradingEngine.GetState().Settings;
+
+        _settings = new UiSettings
+        {
+            PaperTrading = s.PaperTrading,
+            MaxUsdPerTrade = s.MaxUsdPerTrade <= 0 ? 30 : s.MaxUsdPerTrade,
+            NetProfitTargetUsdt = s.NetProfitTargetUsdt <= 0 ? 0.10m : s.NetProfitTargetUsdt,
+            TimeExitSeconds = s.TimeExitSeconds <= 0 ? 240 : s.TimeExitSeconds,
+            HardStopLossPct = s.HardStopLossPct <= 0 ? 0.8m : s.HardStopLossPct,
+            TopSymbolsCount = s.TopSymbolsCount <= 0 ? 200 : s.TopSymbolsCount,
+            LimitMakerSeconds = s.LimitMakerSeconds <= 0 ? 3 : s.LimitMakerSeconds
+        };
+
+        _original = CloneSettings(_settings);
+    }
+
+    private async Task ReloadRuntimeAsync()
+    {
+        if (_busy) return;
+
+        _busy = true;
+        StateHasChanged();
+
+        try
+        {
+            LoadFromRuntime();
+            _pendingToastMessage = "🔄 Runtime settings reloaded from engine";
+            _pendingToastType = "info";
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (_busy) return;
+
+        // Validation
+        if (_settings.NetProfitTargetUsdt < 0.01m)
+        {
+            _pendingToastMessage = "❌ Net Profit Target too low (min 0.01 USDT)";
+            _pendingToastType = "error";
+            StateHasChanged();
+            return;
+        }
+
+        if (_settings.TimeExitSeconds < 30)
+        {
+            _pendingToastMessage = "❌ Time Exit must be >= 30 seconds";
+            _pendingToastType = "error";
+            StateHasChanged();
+            return;
+        }
+
+        if (_settings.TopSymbolsCount < 50)
+        {
+            _pendingToastMessage = "❌ Top Symbols must be >= 50";
+            _pendingToastType = "error";
+            StateHasChanged();
+            return;
+        }
+
+        if (_settings.HardStopLossPct < 0.1m)
+        {
+            _pendingToastMessage = "❌ Hard Stop Loss must be >= 0.1%";
+            _pendingToastType = "error";
+            StateHasChanged();
+            return;
+        }
+
+        if (_settings.MaxUsdPerTrade < 5m)
+        {
+            _pendingToastMessage = "❌ Max USD Per Trade must be >= 5";
+            _pendingToastType = "error";
+            StateHasChanged();
+            return;
+        }
+
+        _busy = true;
+        StateHasChanged();
+
+        try
+        {
+            // Map back to BotSettings
+            var current = TradingEngine.GetState().Settings;
+
+            current.PaperTrading = _settings.PaperTrading;
+            current.MaxUsdPerTrade = _settings.MaxUsdPerTrade;
+            current.NetProfitTargetUsdt = _settings.NetProfitTargetUsdt;
+            current.TimeExitSeconds = _settings.TimeExitSeconds;
+            current.HardStopLossPct = _settings.HardStopLossPct;
+            current.TopSymbolsCount = _settings.TopSymbolsCount;
+            current.LimitMakerSeconds = _settings.LimitMakerSeconds;
+
+            await TradingEngine.EnqueueAsync(new UpdateBotSettingsCommand(current));
+
+            // Update original snapshot
+            _original = CloneSettings(_settings);
+
+            _pendingToastMessage = "✅ Runtime settings applied successfully";
+            _pendingToastType = "success";
+        }
+        catch (Exception ex)
+        {
+            _pendingToastMessage = $"❌ Apply failed: {ex.Message}";
+            _pendingToastType = "error";
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ResetDefaults()
+    {
+        _settings.NetProfitTargetUsdt = 0.10m;
+        _settings.TimeExitSeconds = 240;
+        _settings.HardStopLossPct = 0.8m;
+        _settings.TopSymbolsCount = 100;
+        _settings.LimitMakerSeconds = 3;
+        _settings.MaxUsdPerTrade = 30;
+        _settings.PaperTrading = false;
+
+        _pendingToastMessage = "🔄 Defaults restored (click 'Apply Changes' to commit)";
+        _pendingToastType = "info";
+        StateHasChanged();
+    }
+
+    private static UiSettings CloneSettings(UiSettings source)
+    {
+        return new UiSettings
+        {
+            PaperTrading = source.PaperTrading,
+            MaxUsdPerTrade = source.MaxUsdPerTrade,
+            NetProfitTargetUsdt = source.NetProfitTargetUsdt,
+            TimeExitSeconds = source.TimeExitSeconds,
+            HardStopLossPct = source.HardStopLossPct,
+            TopSymbolsCount = source.TopSymbolsCount,
+            LimitMakerSeconds = source.LimitMakerSeconds
+        };
+    }
+
+    private sealed class UiSettings
+    {
+        public bool PaperTrading { get; set; }
+        public decimal MaxUsdPerTrade { get; set; }
+        public decimal NetProfitTargetUsdt { get; set; }
+        public int TimeExitSeconds { get; set; }
+        public decimal HardStopLossPct { get; set; }
+        public int TopSymbolsCount { get; set; }
+        public int LimitMakerSeconds { get; set; }
+    }
+}

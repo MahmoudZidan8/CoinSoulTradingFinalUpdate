@@ -1,0 +1,421 @@
+﻿@page "/trading/history"
+@layout DashboardLayout
+@rendermode InteractiveServer
+@implements IDisposable
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Repository.DbContext
+@using CoinSoul.Entities
+@using Microsoft.EntityFrameworkCore
+
+@inject IDbContextFactory<CoinSoulDbContext> DbFactory
+@inject IJSRuntime JS
+
+<MudContainer MaxWidth="MaxWidth.False" Class="py-4" Style="background-color:black">
+
+    <!-- HEADER -->
+    <MudText Typo="Typo.h4" Class="mb-4" Style="color:#f1f5f9; font-weight:700;">
+        📜 Account Trade History
+    </MudText>
+
+    <!-- FILTER PANEL -->
+    <MudPaper Class="pa-4 mb-4" Style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.12);">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_from"
+                               Label="From (UTC)"
+                               Editable="true"
+                               PickerVariant="PickerVariant.Dialog"
+                               Variant="Variant.Outlined" 
+                               Color="Color.Primary"
+                               Class="dark-date" />
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_to"
+                               Label="To (UTC)"
+                               Editable="true"
+                               PickerVariant="PickerVariant.Dialog"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               Class="dark-date" />
+            </MudItem>
+
+            <MudItem xs="12" md="2">
+                <MudTextField @bind-Value="_symbol"
+                              Label="Symbol (optional)"
+                              Variant="Variant.Outlined"
+                              Placeholder="e.g., BTCUSDT"
+                              Clearable />
+            </MudItem>
+
+            <MudItem xs="12" md="2">
+                <MudSelect T="string"
+                           Label="Side (optional)"
+                           Variant="Variant.Outlined"
+                           @bind-Value="_side"
+                           Clearable>
+                    <MudSelectItem Value="@ALL">ALL</MudSelectItem>
+                    <MudSelectItem Value="@("BUY")">BUY</MudSelectItem>
+                    <MudSelectItem Value="@("SELL")">SELL</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" md="2" Class="d-flex gap-2 align-end">
+                <MudButton Color="Color.Primary"
+                           OnClick="SearchAsync"
+                           Disabled="_loading"
+                           Variant="Variant.Filled"
+                           FullWidth>
+                    @if (_loading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate Class="mr-2" />
+                    }
+                    Search
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined"
+                           OnClick="TodayAsync"
+                           Disabled="_loading"
+                           FullWidth>
+                    Today
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- SUMMARY -->
+    <MudPaper Class="pa-4 mb-4" Style="background: rgba(2,6,23,.55); border: 1px solid rgba(148,163,184,.1);">
+        <MudGrid>
+            <MudItem xs="6" md="3">
+                <MudText Typo="Typo.caption" Style="color:#94a3b8;">Total Trades</MudText>
+                <MudText Typo="Typo.h6">@_totalTrades</MudText>
+            </MudItem>
+
+            <MudItem xs="6" md="3">
+                <MudText Typo="Typo.caption" Style="color:#94a3b8;">Total Buy Volume</MudText>
+                <MudText Typo="Typo.h6" Style="color:#22c55e;">
+                    $@_totalBuyVolume.ToString("N2")
+                </MudText>
+            </MudItem>
+
+            <MudItem xs="6" md="3">
+                <MudText Typo="Typo.caption" Style="color:#94a3b8;">Total Sell Volume</MudText>
+                <MudText Typo="Typo.h6" Style="color:#ef4444;">
+                    $@_totalSellVolume.ToString("N2")
+                </MudText>
+            </MudItem>
+
+            <MudItem xs="6" md="3">
+                <MudText Typo="Typo.caption" Style="color:#94a3b8;">Total Fees</MudText>
+                <MudText Typo="Typo.h6" Style="color:#f59e0b;">
+                    @_totalFees.ToString("N8")
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- TABLE -->
+    <MudPaper Class="pa-2 dark-surface" Elevation="0" Style="background: rgba(15,23,42,.6); border: 1px solid rgba(148,163,184,.12);">
+        <MudTable Items="_pagedRows"
+                  Dense
+                  Hover
+                  Bordered
+                  Striped
+                  Loading="_loading"
+                  FixedHeader
+                  Height="600px" 
+                  Class="dark-table">
+
+            <HeaderContent>
+                <MudTh>Time (Local)</MudTh>
+                <MudTh>Symbol</MudTh>
+                <MudTh>Side</MudTh>
+                <MudTh>Source</MudTh>
+                <MudTh>Maker</MudTh>
+                <MudTh Align="Align.Right">Price</MudTh>
+                <MudTh Align="Align.Right">Qty</MudTh>
+                <MudTh Align="Align.Right">Quote</MudTh>
+                <MudTh Align="Align.Right">Fee</MudTh>
+                <MudTh>Fee Asset</MudTh>
+                <MudTh Align="Align.Right">Order ID</MudTh>
+            </HeaderContent>
+
+            <RowTemplate>
+                <MudTd>@context.TimeLocal</MudTd>
+
+                <MudTd>
+                    <MudChip Size="Size.Small" Variant="Variant.Outlined">
+                        @context.Symbol
+                    </MudChip>
+                </MudTd>
+
+                <MudTd>
+                    <MudChip Size="Size.Small"
+                             Color="@(context.Side == "BUY" ? Color.Success : Color.Error)">
+                        @context.Side
+                    </MudChip>
+                </MudTd>
+
+                <MudTd>
+                    <MudChip Size="Size.Small"
+                             Color="@(context.Source == "BOT" ? Color.Primary : Color.Default)"
+                             Variant="Variant.Text">
+                        @context.Source
+                    </MudChip>
+                </MudTd>
+
+                <MudTd>
+                    @if (context.IsMaker)
+                    {
+                        <MudChip Size="Size.Small" Color="Color.Info" Variant="Variant.Text">M</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip Size="Size.Small" Color="Color.Default" Variant="Variant.Text">T</MudChip>
+                    }
+                </MudTd>
+
+                <MudTd Align="Align.Right">@context.Price.ToString("0.########")</MudTd>
+                <MudTd Align="Align.Right">@context.Quantity.ToString("0.########")</MudTd>
+                <MudTd Align="Align.Right">@context.QuoteQty.ToString("0.##")</MudTd>
+                <MudTd Align="Align.Right">@context.Commission.ToString("0.########")</MudTd>
+                <MudTd>@context.CommissionAsset</MudTd>
+
+                <MudTd Align="Align.Right">
+                    <MudText Typo="Typo.caption">@context.OrderId</MudText>
+                </MudTd>
+            </RowTemplate>
+
+            <NoRecordsContent>
+                <MudText Class="pa-4">No trades found for the selected period.</MudText>
+            </NoRecordsContent>
+
+        </MudTable>
+
+        <!-- PAGINATION -->
+        <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-4">
+            <MudText Typo="Typo.body2" Style="color:#94a3b8;">
+                Showing @_pagedRows.Count of @_totalTrades trades
+            </MudText>
+
+            <MudStack Row Spacing="2">
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           OnClick="PreviousPageAsync"
+                           Disabled="@(_currentPage <= 1 || _loading)">
+                    Previous
+                </MudButton>
+
+                <MudText Typo="Typo.body2" Style="color:#f1f5f9;" Class="px-4 d-flex align-center">
+                    Page @_currentPage of @_totalPages
+                </MudText>
+
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           OnClick="NextPageAsync"
+                           Disabled="@(_currentPage >= _totalPages || _loading)">
+                    Next
+                </MudButton>
+            </MudStack>
+        </MudStack>
+
+    </MudPaper>
+
+</MudContainer>
+
+@code {
+    private const string ALL = "ALL";
+    private const int PageSize = 50;
+
+    private bool _jsReady;
+    private bool _loading;
+
+    private DateTime? _from = DateTime.UtcNow.Date;
+    private DateTime? _to = DateTime.UtcNow.Date;
+    private string _symbol = "";
+    private string _side = ALL;
+
+    private List<Row> _allRows = new();
+    private List<Row> _pagedRows = new();
+    
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private int _totalTrades;
+    private decimal _totalBuyVolume;
+    private decimal _totalSellVolume;
+    private decimal _totalFees;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _jsReady = true;
+        await TodayAsync();
+    }
+
+    private async Task TodayAsync()
+    {
+        _from = DateTime.UtcNow.Date;
+        _to = DateTime.UtcNow.Date;
+        _symbol = "";
+        _side = ALL;
+        _currentPage = 1;
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        if (!_jsReady) return;
+
+        if (_from == null || _to == null)
+        {
+            await Toast("Please select both dates", "warning");
+            return;
+        }
+
+        _loading = true;
+        _allRows.Clear();
+        _pagedRows.Clear();
+        _totalTrades = 0;
+        _totalBuyVolume = 0;
+        _totalSellVolume = 0;
+        _totalFees = 0;
+        _currentPage = 1;
+
+        try
+        {
+            // ✅ CRITICAL: Ensure proper UTC boundaries
+            // FromDate: Start of day in UTC (00:00:00 UTC)
+            var fromUtc = DateTime.SpecifyKind(_from.Value.Date, DateTimeKind.Utc);
+            
+            // ToDate: End of day in UTC (23:59:59.999 UTC)
+            var toUtc = DateTime.SpecifyKind(_to.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            // Build query
+            var query = db.AccountTrades
+                .AsNoTracking()
+                .Where(t => t.TradeTimeUtc >= fromUtc && t.TradeTimeUtc <= toUtc);
+
+            // Apply symbol filter
+            if (!string.IsNullOrWhiteSpace(_symbol))
+            {
+                var symbolUpper = _symbol.Trim().ToUpper();
+                query = query.Where(t => t.Symbol == symbolUpper);
+            }
+
+            // Apply side filter
+            if (_side != ALL && !string.IsNullOrWhiteSpace(_side))
+            {
+                query = query.Where(t => t.Side == _side);
+            }
+
+            // Fetch all trades
+            var dbTrades = await query
+                .OrderByDescending(t => t.TradeTimeUtc)
+                .ToListAsync();
+
+            // Convert to rows
+            _allRows = dbTrades.Select(t => new Row
+            {
+                TradeId = t.TradeId,
+                TimeUtc = t.TradeTimeUtc,
+                Symbol = t.Symbol,
+                Side = t.Side,
+                Source = t.Source,
+                Price = t.Price,
+                Quantity = t.Quantity,
+                QuoteQty = t.QuoteQty,
+                Commission = t.Commission,
+                CommissionAsset = t.CommissionAsset,
+                IsMaker = t.IsMaker,
+                OrderId = t.OrderId
+            }).ToList();
+
+            // Calculate summaries
+            _totalTrades = _allRows.Count;
+            _totalBuyVolume = _allRows.Where(r => r.Side == "BUY").Sum(r => r.QuoteQty);
+            _totalSellVolume = _allRows.Where(r => r.Side == "SELL").Sum(r => r.QuoteQty);
+            _totalFees = _allRows.Sum(r => r.Commission);
+
+            // Calculate pagination
+            _totalPages = (_totalTrades + PageSize - 1) / PageSize;
+            if (_totalPages < 1) _totalPages = 1;
+
+            // Load first page
+            UpdatePagedRows();
+
+            await Toast($"Loaded {_totalTrades} trades", "success");
+        }
+        catch (Exception ex)
+        {
+            await Toast($"Error: {ex.Message}", "error");
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_currentPage >= _totalPages) return;
+
+        _currentPage++;
+        UpdatePagedRows();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_currentPage <= 1) return;
+
+        _currentPage--;
+        UpdatePagedRows();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdatePagedRows()
+    {
+        var skip = (_currentPage - 1) * PageSize;
+        _pagedRows = _allRows
+            .Skip(skip)
+            .Take(PageSize)
+            .ToList();
+    }
+
+    private async Task Toast(string message, string type)
+    {
+        if (!_jsReady) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("showToast", message, type);
+        }
+        catch { }
+    }
+
+    private sealed class Row
+    {
+        public long TradeId { get; set; }
+        public DateTime TimeUtc { get; set; }
+        public string Symbol { get; set; } = "";
+        public string Side { get; set; } = "";
+        public string Source { get; set; } = "";
+        public decimal Price { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal QuoteQty { get; set; }
+        public decimal Commission { get; set; }
+        public string CommissionAsset { get; set; } = "";
+        public bool IsMaker { get; set; }
+        public long? OrderId { get; set; }
+
+        // ✅ Display in local time for user convenience
+        public string TimeLocal => TimeUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    public void Dispose() { }
+}

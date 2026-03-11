@@ -1,0 +1,53 @@
+-- Safe settings update for CoinSoul AI v5 PRO
+-- Only updates columns that actually exist in your BotSettings table
+
+IF COL_LENGTH('BotSettings', 'TargetUsdPerTrade') IS NOT NULL
+    UPDATE BotSettings SET TargetUsdPerTrade = 18;
+IF COL_LENGTH('BotSettings', 'MinUsdPerTrade') IS NOT NULL
+    UPDATE BotSettings SET MinUsdPerTrade = 18;
+IF COL_LENGTH('BotSettings', 'MinUsdtToOpenNewPosition') IS NOT NULL
+    UPDATE BotSettings SET MinUsdtToOpenNewPosition = 18;
+IF COL_LENGTH('BotSettings', 'MaxOpenTrades') IS NOT NULL
+    UPDATE BotSettings SET MaxOpenTrades = 5;
+IF COL_LENGTH('BotSettings', 'TradeHistoryTopSymbols') IS NOT NULL
+    UPDATE BotSettings SET TradeHistoryTopSymbols = 30;
+IF COL_LENGTH('BotSettings', 'TakeProfitGrossPct') IS NOT NULL
+    UPDATE BotSettings SET TakeProfitGrossPct = 1.00;
+IF COL_LENGTH('BotSettings', 'StopLossGrossPct') IS NOT NULL
+    UPDATE BotSettings SET StopLossGrossPct = 2.00;
+IF COL_LENGTH('BotSettings', 'NetProfitTargetUsd') IS NOT NULL
+    UPDATE BotSettings SET NetProfitTargetUsd = 0.20;
+IF COL_LENGTH('BotSettings', 'UseOcoExit') IS NOT NULL
+    UPDATE BotSettings SET UseOcoExit = 1;
+IF COL_LENGTH('BotSettings', 'UseLimitMakerEntry') IS NOT NULL
+    UPDATE BotSettings SET UseLimitMakerEntry = 1;
+IF COL_LENGTH('BotSettings', 'FallbackToMarketOnEntryTimeout') IS NOT NULL
+    UPDATE BotSettings SET FallbackToMarketOnEntryTimeout = 1;
+IF COL_LENGTH('BotSettings', 'LimitMakerTimeoutSeconds') IS NOT NULL
+    UPDATE BotSettings SET LimitMakerTimeoutSeconds = 20;
+IF COL_LENGTH('BotSettings', 'LimitMakerDiscountBps') IS NOT NULL
+    UPDATE BotSettings SET LimitMakerDiscountBps = 5;
+IF COL_LENGTH('BotSettings', 'SmartCooldownMinutes') IS NOT NULL
+    UPDATE BotSettings SET SmartCooldownMinutes = 10;
+IF COL_LENGTH('BotSettings', 'CooldownAfterLossSeconds') IS NOT NULL
+    UPDATE BotSettings SET CooldownAfterLossSeconds = 600;
+IF COL_LENGTH('BotSettings', 'CooldownSameSymbolSeconds') IS NOT NULL
+    UPDATE BotSettings SET CooldownSameSymbolSeconds = 600;
+IF COL_LENGTH('BotSettings', 'MinFreeUsdtReserve') IS NOT NULL
+    UPDATE BotSettings SET MinFreeUsdtReserve = 2;
+IF COL_LENGTH('BotSettings', 'PlaceSeparateTpSlIfOcoFails') IS NOT NULL
+    UPDATE BotSettings SET PlaceSeparateTpSlIfOcoFails = 1;
+IF COL_LENGTH('BotSettings', 'OcoRetryAttempts') IS NOT NULL
+    UPDATE BotSettings SET OcoRetryAttempts = 2;
+IF COL_LENGTH('BotSettings', 'TimeExitMinutes') IS NOT NULL
+    UPDATE BotSettings SET TimeExitMinutes = 20;
+IF COL_LENGTH('BotSettings', 'MaxTradeDurationMinutes') IS NOT NULL
+    UPDATE BotSettings SET MaxTradeDurationMinutes = 20;
+IF COL_LENGTH('BotSettings', 'EnableMarketRegimeFilter') IS NOT NULL
+    UPDATE BotSettings SET EnableMarketRegimeFilter = 1;
+IF COL_LENGTH('BotSettings', 'RiskMultBear') IS NOT NULL
+    UPDATE BotSettings SET RiskMultBear = 0.60;
+IF COL_LENGTH('BotSettings', 'TpMultBear') IS NOT NULL
+    UPDATE BotSettings SET TpMultBear = 0.85;
+IF COL_LENGTH('BotSettings', 'PreventSameSymbolTwice') IS NOT NULL
+    UPDATE BotSettings SET PreventSameSymbolTwice = 1;

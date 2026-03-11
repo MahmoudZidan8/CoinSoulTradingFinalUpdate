@@ -1,0 +1,72 @@
+﻿@using CoinSoul.Trading.Core
+@inject ITradingEngine TradingEngine
+
+<MudPaper Class="pa-4" Style="background-color:black">
+
+    <MudText Typo="Typo.h6" Class="mb-2">📈 Performance Analytics</MudText>
+
+    <MudGrid>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Total Trades</MudText>
+            <MudText Typo="Typo.h6">@TotalTrades</MudText>
+        </MudItem>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Win Rate</MudText>
+            <MudText Typo="Typo.h6">@WinRate %</MudText>
+        </MudItem>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Wins</MudText>
+            <MudText Typo="Typo.h6" Color="Color.Success">@Wins</MudText>
+        </MudItem>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Losses</MudText>
+            <MudText Typo="Typo.h6" Color="Color.Error">@Losses</MudText>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudDivider Class="my-2" />
+        </MudItem>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Avg Trade PnL</MudText>
+            <MudText Typo="Typo.h6">@AvgPnl.ToString("0.00") $</MudText>
+        </MudItem>
+
+        <MudItem xs="6">
+            <MudText Typo="Typo.caption">Total PnL</MudText>
+            <MudText Typo="Typo.h6"
+                     Color="@(TotalPnl >= 0 ? Color.Success : Color.Error)">
+                @TotalPnl.ToString("0.00") $
+            </MudText>
+        </MudItem>
+
+    </MudGrid>
+
+</MudPaper>
+
+@code {
+    int TotalTrades;
+    int Wins;
+    int Losses;
+    decimal AvgPnl;
+    decimal TotalPnl;
+    decimal WinRate;
+
+    protected override void OnInitialized()
+    {
+        var state = TradingEngine.GetState();
+        var trades = state.TradeHistory;
+
+        TotalTrades = trades.Count;
+        Wins = trades.Count(t => t.PnL > 0);
+        Losses = trades.Count(t => t.PnL < 0);
+
+        TotalPnl = trades.Sum(t => t.PnL);
+        AvgPnl = TotalTrades > 0 ? trades.Average(t => t.PnL) : 0;
+        WinRate = TotalTrades > 0 ? (decimal)Wins / TotalTrades * 100 : 0;
+    }
+}

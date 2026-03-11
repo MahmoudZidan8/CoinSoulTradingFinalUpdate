@@ -1,0 +1,360 @@
+/* ============================================
+   CoinSoul Trading - Professional Dark Theme
+   ============================================ */
+
+/* Global Base */
+html, body {
+    background-color: #0f172a !important;
+    color: #e2e8f0 !important;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* MudBlazor Overrides - Papers & Cards */
+.mud-paper {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2) !important;
+}
+
+.mud-paper-elevation-1 {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3) !important;
+}
+
+.mud-paper-elevation-2 {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
+}
+
+.mud-paper-elevation-3 {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Layout Components */
+.mud-layout {
+    background-color: #0f172a !important;
+}
+
+.mud-main-content {
+    background-color: #0f172a !important;
+    overflow: visible !important;
+    min-height: 100vh;
+}
+
+.dashboard-content {
+    background-color: #0f172a !important;
+    overflow: visible !important;
+    padding: 24px !important;
+}
+
+/* AppBar */
+.mud-appbar {
+    background-color: #0b1220 !important;
+    color: #e2e8f0 !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+.dashboard-appbar {
+    background-color: #0b1220 !important;
+    border-bottom: 1px solid #334155 !important;
+}
+
+/* Sidebar/Drawer */
+.mud-drawer {
+    background-color: #0b1220 !important;
+    border-right: 1px solid #1e293b !important;
+    width: 260px !important;
+}
+
+.dashboard-drawer {
+    background-color: #0b1220 !important;
+}
+
+.mud-drawer-content {
+    background-color: #0b1220 !important;
+}
+
+/* Navigation Links */
+.mud-nav-link {
+    color: #94a3b8 !important;
+    border-radius: 8px !important;
+    margin: 4px 8px !important;
+    transition: all 0.2s ease !important;
+}
+
+.mud-nav-link:hover {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+    transform: translateX(4px);
+}
+
+.mud-nav-link-active {
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0.2) 0%, rgba(99, 102, 241, 0.05) 100%) !important;
+    color: #6366f1 !important;
+    font-weight: 600 !important;
+    border-left: 3px solid #6366f1 !important;
+}
+
+.mud-nav-link-active .mud-icon-root {
+    color: #6366f1 !important;
+}
+
+/* Tables */
+.mud-table {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+    border-radius: 12px !important;
+}
+
+.mud-table-container {
+    background-color: #1e293b !important;
+    border-radius: 12px !important;
+}
+
+.mud-table-head {
+    background-color: #0f172a !important;
+}
+
+.mud-table-head .mud-table-cell {
+    background-color: #0f172a !important;
+    color: #e2e8f0 !important;
+    font-weight: 600 !important;
+    border-bottom: 2px solid #334155 !important;
+}
+
+.mud-table-row {
+    background-color: #1e293b !important;
+    transition: background-color 0.2s ease;
+}
+
+.mud-table-row:hover {
+    background-color: rgba(99, 102, 241, 0.1) !important;
+}
+
+.mud-table-cell {
+    border-bottom: 1px solid #334155 !important;
+    color: #e2e8f0 !important;
+}
+
+.mud-table-striped .mud-table-row:nth-of-type(odd) {
+    background-color: #1a2332 !important;
+}
+
+.mud-table-striped .mud-table-row:nth-of-type(even) {
+    background-color: #1e293b !important;
+}
+
+/* Input Fields */
+.mud-input,
+.mud-input-control,
+.mud-input-slot {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+    border-color: #334155 !important;
+}
+
+.mud-input-outlined {
+    border-color: #334155 !important;
+}
+
+.mud-input-outlined:hover {
+    border-color: #6366f1 !important;
+}
+
+.mud-input-outlined.mud-input-focused {
+    border-color: #6366f1 !important;
+}
+
+/* Select & Date Picker */
+.mud-select,
+.mud-picker {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+}
+
+.mud-select-input {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+}
+
+.mud-picker-calendar-container {
+    background-color: #1e293b !important;
+}
+
+.mud-picker-calendar-header {
+    background-color: #0f172a !important;
+}
+
+/* Popovers & Dropdowns - FIX Z-INDEX */
+.mud-popover,
+.mud-popover-open,
+.mud-overlay,
+.mud-picker-content,
+.mud-select-popover,
+.mud-menu {
+    z-index: 4000 !important;
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+}
+
+.mud-popover-provider {
+    z-index: 3500 !important;
+}
+
+.mud-list-item {
+    color: #e2e8f0 !important;
+}
+
+.mud-list-item:hover {
+    background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+.mud-list-item-selected {
+    background-color: rgba(99, 102, 241, 0.25) !important;
+}
+
+/* Dialogs */
+.mud-dialog {
+    background-color: #1e293b !important;
+    z-index: 5000 !important;
+}
+
+.mud-dialog-title {
+    background-color: #0f172a !important;
+    color: #e2e8f0 !important;
+}
+
+.mud-dialog-content {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+}
+
+/* Buttons */
+.mud-button-root {
+    border-radius: 8px !important;
+    text-transform: none !important;
+    font-weight: 500 !important;
+}
+
+.mud-button-filled-primary {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+}
+
+.mud-button-filled-primary:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+}
+
+/* Chips */
+.mud-chip {
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+}
+
+/* Alerts */
+.mud-alert {
+    background-color: #1e293b !important;
+    border-radius: 8px !important;
+}
+
+.mud-alert-filled-success {
+    background-color: rgba(34, 197, 94, 0.15) !important;
+    border-left: 3px solid #22c55e !important;
+}
+
+.mud-alert-filled-error {
+    background-color: rgba(239, 68, 68, 0.15) !important;
+    border-left: 3px solid #ef4444 !important;
+}
+
+.mud-alert-filled-warning {
+    background-color: rgba(251, 146, 60, 0.15) !important;
+    border-left: 3px solid #fb923c !important;
+}
+
+.mud-alert-filled-info {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+    border-left: 3px solid #3b82f6 !important;
+}
+
+/* Charts Container - Fixed Height */
+.chart-container {
+    min-height: 350px;
+    height: 350px;
+    position: relative;
+    overflow: visible;
+    background-color: #1e293b;
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.chart-container canvas {
+    max-height: 100%;
+}
+
+/* Page Containers */
+.analytics-page,
+.account-page,
+.live-monitor-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    overflow-x: hidden;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+}
+
+/* Progress Bars */
+.mud-progress-linear {
+    background-color: #334155 !important;
+}
+
+/* Dividers */
+.mud-divider {
+    background-color: #334155 !important;
+}
+
+/* Text Colors */
+.mud-typography-h5,
+.mud-typography-h6 {
+    color: #f1f5f9 !important;
+}
+
+.mud-typography-body1,
+.mud-typography-body2 {
+    color: #e2e8f0 !important;
+}
+
+.mud-typography-caption {
+    color: #94a3b8 !important;
+}
+
+/* Fix White Flash on Load */
+.mud-main-content::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #0f172a;
+    z-index: -1;
+}

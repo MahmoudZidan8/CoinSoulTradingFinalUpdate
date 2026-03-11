@@ -1,0 +1,139 @@
+@using CoinSoul.Trading.Core
+@using CoinSoul.Trading.Engine
+@implements IDisposable
+@inject PortfolioStateService PortfolioState
+
+<MudPaper Class="pa-4 glass-card" Elevation="2" Style=@($"border-left: 4px solid {_borderColor};")>
+    <MudStack Spacing="3">
+        <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+            <MudText Typo="Typo.h6" Style="color: #f1f5f9;">
+                <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Class="mr-2" Color="Color.Primary" />
+                Portfolio
+            </MudText>
+            <MudChip Color="@GetStatusColor()" Variant="Variant.Filled" Size="Size.Small">
+                @(_state?.Risk.Status ?? "LOADING")
+            </MudChip>
+        </MudStack>
+
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Primary" />
+        }
+        else if (_state != null && _state.Success)
+        {
+            <MudStack Spacing="2">
+                <div>
+                    <MudText Typo="Typo.caption" Style="color: #94a3b8;">Total Equity</MudText>
+                    <MudText Typo="Typo.h3" Style="color: #6366f1; font-weight: 700;">
+                        $@_state.Portfolio.TotalEquityUsdt.ToString("N2")
+                    </MudText>
+                </div>
+
+                <MudGrid Spacing="1">
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Style="color: #94a3b8;">Free USDT</MudText>
+                        <MudText Typo="Typo.body1" Style="color: #22c55e; font-weight: 600;">
+                            $@_state.Portfolio.FreeUsdt.ToString("N2")
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Style="color: #94a3b8;">Locked USDT</MudText>
+                        <MudText Typo="Typo.body1" Style="color: #fb923c; font-weight: 600;">
+                            $@_state.Portfolio.LockedUsdt.ToString("N2")
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+
+                <MudDivider Style="background-color: #334155;" />
+
+                <MudStack Spacing="1">
+                    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                        <MudText Typo="Typo.caption" Style="color: #94a3b8;">Start of Day</MudText>
+                        <MudText Typo="Typo.body2" Style="color: #e2e8f0;">
+                            $@_state.Risk.StartOfDayEquityUsdt.ToString("N2")
+                        </MudText>
+                    </MudStack>
+
+                    <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                        <MudText Typo="Typo.caption" Style="color: #94a3b8;">Drawdown</MudText>
+                        <MudText Typo="Typo.h6" Color="@GetDrawdownColor()" Style="font-weight: 700;">
+                            @_state.Risk.DrawdownPct.ToString("+0.00;-0.00")%
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+
+                @if (_state.Risk.PauseUntilUtc != null || _state.Risk.StopUntilUtc != null)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        @_state.Risk.Message
+                    </MudAlert>
+                }
+            </MudStack>
+        }
+
+        <MudButton OnClick="RefreshAsync" Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Disabled="@_loading" StartIcon="@Icons.Material.Filled.Refresh">
+            Refresh
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private bool _loading = true;
+    private DashboardPortfolioStateDto? _state;
+    private string _borderColor = "#6366f1";
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        
+        _refreshTimer = new Timer(async _ =>
+        {
+            await RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        
+        try
+        {
+            _state = await PortfolioState.GetDashboardStateAsync(CancellationToken.None);
+            
+            _borderColor = _state?.Risk.Status switch
+            {
+                "STOPPED" => "#ef4444",
+                "PAUSED" => "#fb923c",
+                "WARNING" => "#eab308",
+                _ => "#6366f1"
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Color GetStatusColor() => _state?.Risk.Status switch
+    {
+        "STOPPED" => Color.Error,
+        "PAUSED" => Color.Warning,
+        "WARNING" => Color.Warning,
+        _ => Color.Success
+    };
+
+    private Color GetDrawdownColor() => _state?.Risk.DrawdownPct switch
+    {
+        <= -10m => Color.Error,
+        <= -5m => Color.Warning,
+        >= 0 => Color.Success,
+        _ => Color.Info
+    };
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

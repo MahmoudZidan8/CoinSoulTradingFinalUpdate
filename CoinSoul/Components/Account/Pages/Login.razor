@@ -1,0 +1,74 @@
+﻿@page "/"
+@page "/login"
+@inject IDialogService DialogService
+@inject IJSRuntime JS
+@using CoinSoul.Components.Layout
+@rendermode InteractiveServer
+@layout EmptyLayout
+
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<link href="css/site.css" rel="stylesheet" />
+
+<div class="login-bg">
+    <div class="login-card modern">
+
+        <div class="login-header">
+            <img src="/images/trading-icon.png" class="login-logo" width="100"height="100"/>
+            <h1>CoinSoul Trading</h1>
+            <p>Professional Trading Platform</p>
+        </div>
+
+        <div class="login-form">
+
+            <MudTextField @bind-Value="UserName"
+                          Placeholder="Username"
+                          Variant="Variant.Outlined"
+                          FullWidth />
+
+            <MudTextField @bind-Value="Password"
+                          Placeholder="Password"
+                          InputType="InputType.Password"
+                          Variant="Variant.Outlined"
+                          FullWidth />
+
+            <MudButton FullWidth
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Size="Size.Large"
+                       Class="login-btn"
+                       OnClick="DoLogin">
+                Sign In
+            </MudButton>
+
+
+        </div>
+
+    </div>
+</div>
+
+@code {
+    string UserName = "";
+    string Password = "";
+
+    void DoLogin()
+    {
+        Console.WriteLine("LOGIN CLICKED");
+
+        if (UserName == "Admin" && Password == "Admin@308")
+        {
+            // JS.InvokeVoidAsync("alert", "Welcome back 🚀");
+            // Snackbar.Add("Welcome back 🚀", Severity.Success);
+            Nav.NavigateTo("/Index", false);
+        }
+        else
+        {
+            JS.InvokeVoidAsync("alert", "Invalid credentials");
+
+            // Snackbar.Add("Invalid credentials", Severity.Error);
+        }
+    }
+  
+
+}

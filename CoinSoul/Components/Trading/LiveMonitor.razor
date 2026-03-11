@@ -1,0 +1,398 @@
+﻿@page "/trading/live"
+@layout DashboardLayout
+@rendermode InteractiveServer
+@implements IDisposable
+
+@using CoinSoul.Components.Layout
+@using CoinSoul.Repository.DbContext
+@using CoinSoul.Entities
+@using CoinSoul.Trading.Core
+@using CoinSoul.Trading.Engine
+@using Microsoft.EntityFrameworkCore
+@using Binance.Net.Interfaces.Clients
+@inject IDbContextFactory<CoinSoulDbContext> DbFactory
+@inject IBinanceRestClient BinanceClient
+@inject PortfolioStateService PortfolioState
+
+<div class="live-monitor-page fade-in" style="max-width: 1600px; margin: 0 auto;background-color:black">
+
+    <MudText Typo="Typo.h4" Class="mb-4" Style="color: #f1f5f9; font-weight: 700;">
+        📡 Live Trade Monitor
+    </MudText>
+
+    <MudGrid Spacing="3" Class="mb-4">
+        <MudItem xs="12" md="8">
+            <PortfolioCard />
+        </MudItem>
+        
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 glass-card" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3" Style="color: #f1f5f9;">
+                    <MudIcon Icon="@Icons.Material.Filled.Shield" Class="mr-2" />
+                    Risk Status
+                </MudText>
+                @if (_riskState != null)
+                {
+                    <MudStack Spacing="2">
+                        <MudChip Color="@GetRiskStatusColor(_riskState.Status)" Variant="Variant.Filled" Size="Size.Large">
+                            @_riskState.Status
+                        </MudChip>
+                        
+                        <MudText Typo="Typo.body1" Style="color: #e2e8f0;">
+                            @_riskState.Message
+                        </MudText>
+                        
+                        @if (_riskState.PauseUntilUtc != null)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true">
+                                Paused until @_riskState.PauseUntilUtc.Value.ToString("HH:mm:ss") UTC
+                            </MudAlert>
+                        }
+                        
+                        @if (_riskState.StopUntilUtc != null)
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true">
+                                Stopped until @_riskState.StopUntilUtc.Value.ToString("yyyy-MM-dd HH:mm") UTC
+                            </MudAlert>
+                        }
+                        
+                        <MudDivider />
+                        
+                        <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                            <MudText Typo="Typo.caption" Style="color: #94a3b8;">Drawdown</MudText>
+                            <MudText Typo="Typo.h6" Color="@GetDrawdownColor(_riskState.DrawdownPct)" Style="font-weight: 700;">
+                                @_riskState.DrawdownPct.ToString("+0.00;-0.00")%
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Primary" />
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Class="pa-4 mb-4 glass-card" Elevation="2">
+        <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-3">
+            <MudText Typo="Typo.h6" Style="color: #f1f5f9; font-weight: 600;">
+                <MudIcon Icon="@Icons.Material.Filled.ShowChart" Class="mr-2" />
+                Open Positions (@_openPositions.Count)
+            </MudText>
+            <MudChip Size="Size.Small" Color="Color.Info">
+                Auto-refresh: ON
+            </MudChip>
+        </MudStack>
+        <MudDivider Class="mb-3" />
+
+        @if (_openPositions.Any())
+        {
+            <MudGrid Spacing="3">
+                @foreach (var pos in _openPositions)
+                {
+                    var priceData = _livePrice.GetValueOrDefault(pos.Symbol, (Price: 0m, Loading: true));
+                    var unrealizedPnl = priceData.Price > 0 ? (priceData.Price - pos.EntryPrice) * pos.Quantity : 0;
+                    var pnlPct = pos.EntryPrice > 0 ? ((priceData.Price - pos.EntryPrice) / pos.EntryPrice) * 100m : 0;
+                    var age = DateTime.UtcNow - pos.OpenedAtUtc;
+
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudPaper Class="pa-3 position-card" Elevation="3" Style=@($"border-left: 4px solid {(unrealizedPnl >= 0 ? "#22c55e" : "#ef4444")}")>
+                            <MudStack Spacing="2">
+                                <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                                    <MudChip Color="Color.Primary" Variant="Variant.Filled" Size="Size.Medium">
+                                        <strong>@pos.Symbol</strong>
+                                    </MudChip>
+                                    <MudChip Color="@GetPnlColor(unrealizedPnl)" Variant="Variant.Filled" Size="Size.Small">
+                                        @unrealizedPnl.ToString("+$0.00;-$0.00")
+                                    </MudChip>
+                                </MudStack>
+
+                                <MudGrid Spacing="1">
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.caption" Style="color: #94a3b8;">Entry</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: #e2e8f0;">
+                                            @pos.EntryPrice.ToString("0.########")
+                                        </MudText>
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.caption" Style="color: #94a3b8;">Current</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: #3b82f6; font-weight: 600;">
+                                            @if (priceData.Loading)
+                                            {
+                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                            }
+                                            else
+                                            {
+                                                @priceData.Price.ToString("0.########")
+                                            }
+                                        </MudText>
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.caption" Style="color: #94a3b8;">Quantity</MudText>
+                                        <MudText Typo="Typo.body2">@pos.Quantity.ToString("0.########")</MudText>
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudText Typo="Typo.caption" Style="color: #94a3b8;">P&L %</MudText>
+                                        <MudText Typo="Typo.body2" Color="@GetPnlColor(unrealizedPnl)" Style="font-weight: 600;">
+                                            @pnlPct.ToString("+0.00;-0.00")%
+                                        </MudText>
+                                    </MudItem>
+                                </MudGrid>
+
+                                <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+                                    <MudText Typo="Typo.caption" Style="color: #94a3b8;">
+                                        <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" />
+                                        Age: @FormatAge(age)
+                                    </MudText>
+                                    
+                                    @if (pos.ExitRequested)
+                                    {
+                                        <MudChip Size="Size.Small" Color="Color.Warning">Exiting...</MudChip>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h6">No Open Positions</MudText>
+                    <MudText>The bot is scanning for trade opportunities...</MudText>
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                </MudStack>
+            </MudAlert>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mt-4 glass-card" Elevation="2">
+        <MudStack Row AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Class="mb-3">
+            <MudText Typo="Typo.h6" Style="color: #f1f5f9; font-weight: 600;">
+                <MudIcon Icon="@Icons.Material.Filled.Event" Class="mr-2" />
+                Recent Events (Last 50)
+            </MudText>
+            <MudButton OnClick="LoadDataAsync" 
+                       Variant="Variant.Text" 
+                       Color="Color.Primary" 
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       Disabled="_loading">
+                Refresh
+            </MudButton>
+        </MudStack>
+        <MudDivider Class="mb-3" />
+
+        <div style="max-height: 450px; overflow-y: auto;">
+            @if (_recentEvents.Any())
+            {
+                <MudStack Spacing="1">
+                    @foreach (var evt in _recentEvents)
+                    {
+                        var eventColor = evt.Level switch
+                        {
+                            "ERROR" => Color.Error,
+                            "WARN" => Color.Warning,
+                            "TRADE" => Color.Success,
+                            _ => Color.Info
+                        };
+
+                        <MudChip Size="Size.Small" 
+                                 Color="@eventColor" 
+                                 Variant="Variant.Filled"
+                                 Style="width: 100%; justify-content: flex-start; font-family: 'Consolas', monospace;">
+                            <MudText Typo="Typo.caption" Style="margin-right: 8px; opacity: 0.7;">
+                                @evt.AtUtc.ToLocalTime().ToString("HH:mm:ss")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Style="font-weight: 600; margin-right: 8px;">
+                                @evt.Type
+                            </MudText>
+                            <MudText Typo="Typo.caption">
+                                @evt.Message
+                            </MudText>
+                        </MudChip>
+                    }
+                </MudStack>
+            }
+            else
+            {
+                <MudText Color="Color.Secondary" Class="pa-4">
+                    <MudIcon Icon="@Icons.Material.Filled.SearchOff" Class="mr-2" />
+                    No recent events
+                </MudText>
+            }
+        </div>
+    </MudPaper>
+
+</div>
+
+@code {
+    private List<PositionRow> _openPositions = new();
+    private List<EventEntity> _recentEvents = new();
+    private Dictionary<string, (decimal Price, bool Loading)> _livePrice = new();
+    private RiskStateDto? _riskState;
+    private CancellationTokenSource? _cts;
+    private bool _loading;
+
+    protected override void OnInitialized()
+    {
+        _cts = new CancellationTokenSource();
+        _ = RefreshLoopAsync(_cts.Token);
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                await LoadDataAsync();
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(3000, token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch
+            {
+                // Continue loop on error
+            }
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (_loading) return;
+
+        _loading = true;
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            
+            // Optimized query - only fetch needed columns
+            var positions = await db.Positions
+                .AsNoTracking()
+                .Where(p => p.IsOpen)
+                .OrderByDescending(p => p.OpenedAtUtc)
+                .Select(p => new PositionRow
+                {
+                    Symbol = p.Symbol,
+                    EntryPrice = p.EntryPrice,
+                    Quantity = p.Quantity,
+                    OpenedAtUtc = p.OpenedAtUtc,
+                    ExitRequested = p.ExitRequested
+                })
+                .ToListAsync();
+
+            _openPositions = positions;
+
+            // Events
+            _recentEvents = await db.Events
+                .AsNoTracking()
+                .OrderByDescending(e => e.AtUtc)
+                .Take(50)
+                .ToListAsync();
+
+            // Risk state
+            var dashboardState = await PortfolioState.GetDashboardStateAsync(CancellationToken.None);
+            _riskState = dashboardState.Risk;
+
+            // Batch fetch all prices
+            await UpdateLivePricesAsync();
+        }
+        catch
+        {
+            // Silent fail - keep old data
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task UpdateLivePricesAsync()
+    {
+        if (!_openPositions.Any()) return;
+
+        try
+        {
+            var tickers = await BinanceClient.SpotApi.ExchangeData.GetTickersAsync();
+            
+            if (tickers.Success && tickers.Data != null)
+            {
+                var tickerMap = tickers.Data.ToDictionary(t => t.Symbol, t => t.LastPrice);
+
+                foreach (var pos in _openPositions)
+                {
+                    if (tickerMap.TryGetValue(pos.Symbol, out var price))
+                    {
+                        _livePrice[pos.Symbol] = (price, false);
+                    }
+                    else if (!_livePrice.ContainsKey(pos.Symbol))
+                    {
+                        _livePrice[pos.Symbol] = (0m, true);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Keep old prices if API fails
+            foreach (var pos in _openPositions)
+            {
+                if (!_livePrice.ContainsKey(pos.Symbol))
+                {
+                    _livePrice[pos.Symbol] = (0m, true);
+                }
+            }
+        }
+    }
+
+    private Color GetPnlColor(decimal value) => value >= 0 ? Color.Success : Color.Error;
+    
+    private Color GetRiskStatusColor(string status) => status switch
+    {
+        "STOPPED" => Color.Error,
+        "PAUSED" => Color.Warning,
+        "WARNING" => Color.Warning,
+        _ => Color.Success
+    };
+    
+    private Color GetDrawdownColor(decimal pct) => pct switch
+    {
+        <= -10m => Color.Error,
+        <= -5m => Color.Warning,
+        >= 0 => Color.Success,
+        _ => Color.Info
+    };
+
+    private string FormatAge(TimeSpan age)
+    {
+        if (age.TotalHours >= 1)
+            return $"{age.TotalHours:0.0}h";
+        else if (age.TotalMinutes >= 1)
+            return $"{age.TotalMinutes:0.0}m";
+        else
+            return $"{age.TotalSeconds:0}s";
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+
+    private sealed class PositionRow
+    {
+        public string Symbol { get; set; } = "";
+        public decimal EntryPrice { get; set; }
+        public decimal Quantity { get; set; }
+        public DateTime OpenedAtUtc { get; set; }
+        public bool ExitRequested { get; set; }
+    }
+}

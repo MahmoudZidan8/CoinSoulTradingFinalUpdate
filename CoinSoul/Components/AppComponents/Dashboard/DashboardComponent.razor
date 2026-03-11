@@ -1,0 +1,80 @@
+﻿@inherits DashboardComponentBase
+@using System.Net.Http.Json
+
+<MudContainer Class="mt-4 px-4" MaxWidth="MaxWidth.False">
+    <MudGrid>
+        <MudItem xs="12" sm="12" md="12" lg="12" xl="12" Class="my-2">
+            @if (IsTrading == true)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ProcesssBuying">Stop Buying</MudButton>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ProcesssBuying">Start Buying</MudButton>
+            }
+            @if (IsSelling == true)
+            {
+                <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Primary" OnClick="ProcesssSelling">Stop Selling</MudButton>
+            }
+            else
+            {
+                <MudButton Class="mx-1" Variant="Variant.Filled" Color="Color.Primary" OnClick="ProcesssSelling">Start Selling</MudButton>
+            }
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="6" lg="6" xl="6">
+            <MudDataGrid @ref="MudGrid" Items="@OrdersFilled" Height="400px">
+                <Columns>
+                    <PropertyColumn Property="x => x.Value.OrderId" Title="Order Id" />
+                    <PropertyColumn Property="x => x.Value.Buy" Title="Buy Price" Format="0.###" />
+                    <PropertyColumn Property="x => x.Value.Sell" Title="Sell Price" Format="0.###" />
+                </Columns>
+            </MudDataGrid>
+        </MudItem>
+
+        <MudItem xs="12" sm="12" md="6" lg="6" xl="6">
+            <MudChart @bind-SelectedIndex="Index"
+                      ChartType="ChartType.Line"
+                      ChartSeries="@Series"
+                      XAxisLabels="@XAxisLabels"
+                      Width="100%"
+                      Height="400px"
+                      ChartOptions="@Options"
+                      CanHideSeries="true"
+                      Class="border rounded border-info" />
+        </MudItem>
+
+        @*  <MudItem xs="12" sm="6" md="3" lg="3" xl="3">
+        <MudDataGrid Items="@FilledOrders">
+        <Columns>
+        <PropertyColumn Property="x => x.Id" Title="Revenue" />
+        </Columns>
+        </MudDataGrid>
+        </MudItem> *@
+
+        <MudItem xs="12" sm="12" md="12" lg="6" xl="6">
+            <div>
+                <MudChart ChartType="ChartType.Bar"
+                          ChartSeries="@Series"
+                          XAxisLabels="@XAxisLabels"
+                          Width="100%"
+                          Height="350px"
+                          ChartOptions="@Options"
+                          CanHideSeries="true"
+                          Class="border rounded border-info" />
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" sm="12" md="12" lg="6" xl="6">
+            <div>
+                <MudPaper Class="pa-4">
+                    <MudChart ChartType="ChartType.Pie"
+                              InputData="@PieData"
+                              InputLabels="@PieLabels"
+                              Width="300px"
+                              Height="300px" />
+                </MudPaper>
+            </div>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
